@@ -1,3 +1,5 @@
 beautifulsoup4
 scrapy
 playwright
+motor
+apscheduler

@@ -1,2 +1,4 @@
-pandas==
-numpy==
+pandas
+numpy
+motor
+pymongo
