@@ -1,2 +1,2 @@
-FastAPI==
-motor==
+FastAPI
+motor
