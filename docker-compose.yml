@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # MONGODB
+  mongo:
+    image: mongo:7-alpine
+    container_name: pricepoa_mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGODB_DB}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    networks:
+      - pricepoa_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # MONGO-EXPRESS (Dev Admin UI) 
+  mongo-express:
+    image: mongo-express:latest
+    container_name: pricepoa_mongo_express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/
+      ME_CONFIG_BASICAUTH: false
+    ports:
+      - "8081:8081"
+    networks:
+      - pricepoa_network
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles:
+      - dev
+
+  # FASTAPI BACKEND 
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: pricepoa_api
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+      MONGODB_URI: ${MONGO_URI}
+      MONGODB_DB: ${MONGODB_DB}
+      API_HOST: ${API_HOST}
+      API_PORT: ${API_PORT}
+      API_RELOAD: ${API_RELOAD}
+      API_LOG_LEVEL: ${API_LOG_LEVEL}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/app
+      - /app/__pycache__
+    networks:
+      - pricepoa_network
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    command: uvicorn main:app --host ${API_HOST} --port ${API_PORT} --reload
+
+  # SCRAPER (Background Worker)
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    container_name: pricepoa_scraper
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+      MONGODB_URI: ${MONGO_URI}
+      MONGODB_DB: ${MONGODB_DB}
+      SCRAPER_LOG_LEVEL: ${SCRAPER_LOG_LEVEL}
+      SCRAPER_CONCURRENT_REQUESTS: ${SCRAPER_CONCURRENT_REQUESTS}
+      SCRAPER_DOWNLOAD_DELAY: ${SCRAPER_DOWNLOAD_DELAY}
+      ENABLE_SCRAPER: ${ENABLE_SCRAPER}
+    networks:
+      - pricepoa_network
+    depends_on:
+      mongo:
+        condition: service_healthy
+    profiles:
+      - scraper
+
+networks:
+  pricepoa_network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    driver: local
+  mongo_config:
+    driver: local
