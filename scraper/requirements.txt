@@ -1,0 +1,3 @@
+Beatiful_soup==
+scrapy==
+playwright==
