@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # MONGODB
   mongo:
-    image: mongo:7-alpine
+    image: mongo:6.0
     container_name: pricepoa_mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
@@ -23,7 +23,7 @@ services:
       retries: 5
       start_period: 15s
 
-  # MONGO-EXPRESS (Dev Admin UI) 
+  # MONGO-EXPRESS (Dev Admin UI)
   mongo-express:
     image: mongo-express:latest
     container_name: pricepoa_mongo_express
@@ -42,7 +42,7 @@ services:
     profiles:
       - dev
 
-  # FASTAPI BACKEND 
+  # FASTAPI BACKEND
   api:
     build:
       context: ./api
