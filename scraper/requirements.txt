@@ -3,3 +3,4 @@ scrapy
 playwright
 motor
 apscheduler
+pydantic

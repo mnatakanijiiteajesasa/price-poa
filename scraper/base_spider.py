@@ -12,6 +12,7 @@ import hashlib
 import json
 import sys
 import os
+from urllib.parse import urlparse
 
 # Fix imports to work when script is run directly or as module
 if __package__ is None or __package__ == '':
@@ -27,3 +28,39 @@ else:
     from ..database.models import Product, Store, Price
 
 logger = logging.getLogger(__name__)
+
+
+class BasePricePoaSpider(Spider):
+    """
+    Base spider for PricePoa scraping operations.
+    Provides common functionality like JavaScript detection and store information.
+    """
+    name = 'base_pricepoa_spider'  # Abstract base spider, not meant to be run directly
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # These attributes are expected to be defined by child classes
+        self.store_chain = getattr(self, 'store_chain', None)
+        self.default_store_branch = getattr(self, 'default_store_branch', None)
+        self.js_domains = getattr(self, 'js_domains', [])
+
+    def _needs_js(self, url: str) -> bool:
+        """
+        Determine if a URL requires JavaScript rendering based on domain.
+
+        Args:
+            url: The URL to check
+
+        Returns:
+            True if the URL's domain is in js_domains, False otherwise
+        """
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            # Remove port if present
+            if ':' in domain:
+                domain = domain.split(':')[0]
+            return domain in self.js_domains
+        except Exception as e:
+            logger.warning(f"Error parsing URL {url} for JS detection: {e}")
+            return False
