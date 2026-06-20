@@ -14,5 +14,11 @@ RUN playwright install --with-deps
 # Copy the rest of the application code
 COPY . .
 
+# Set environment variables for scraping
+ENV SCRAPER_LOG_LEVEL=info
+ENV SCRAPER_CONCURRENT_REQUESTS=16
+ENV SCRAPER_DOWNLOAD_DELAY=1
+ENV ENABLE_SCRAPER=true
+
 # Set the default command to run the worker script
-CMD ["python", "worker.py"]
+CMD ["python", "worker.py", "--mode", "scheduled"]

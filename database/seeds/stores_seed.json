@@ -1,0 +1,132 @@
+[
+  {
+    "chain_name": "Naivas",
+    "branch_name": "Naivas Mega",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.2921,
+    "gps_longitude": 36.8219,
+    "address": "Mega Plaza, Moi Avenue, Nairobi",
+    "phone_number": "+254 700 000000"
+  },
+  {
+    "chain_name": "Naivas",
+    "branch_name": "Naivas Village Market",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.2641,
+    "gps_longitude": 36.8015,
+    "address": "Village Market, Limuru Road, Nairobi",
+    "phone_number": "+254 700 000001"
+  },
+  {
+    "chain_name": "Naivas",
+    "branch_name": "Naivas Westlands",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.2678,
+    "gps_longitude": 36.8015,
+    "address": "Westlands Road, Nairobi",
+    "phone_number": "+254 700 000002"
+  },
+  {
+    "chain_name": "Carrefour",
+    "branch_name": "Carrefour Hub Karen",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.3321,
+    "gps_longitude": 36.6927,
+    "address": "The Hub Karen, Karen Road, Nairobi",
+    "phone_number": "+254 700 000003"
+  },
+  {
+    "chain_name": "Carrefour",
+    "branch_name": "Carrefour Junction",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.2835,
+    "gps_longitude": 36.8245,
+    "address": "Junction Mall, Naivasha Road, Nairobi",
+    "phone_number": "+254 700 000004"
+  },
+  {
+    "chain_name": "Carrefour",
+    "branch_name": "Carrefour Thika Road Mall",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.2194,
+    "gps_longitude": 36.9158,
+    "address": "Thika Road Mall, Nairobi",
+    "phone_number": "+254 700 000005"
+  },
+  {
+    "chain_name": "Quickmart",
+    "branch_name": "Quickmart Westlands",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.2678,
+    "gps_longitude": 36.8015,
+    "address": "Mpaka Road, Westlands, Nairobi",
+    "phone_number": "+254 700 000006"
+  },
+  {
+    "chain_name": "Quickmart",
+    "branch_name": "Quickmart Kilimani",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.3031,
+    "gps_longitude": 36.7902,
+    "address": "Argwings Kodhek Road, Kilimani, Nairobi",
+    "phone_number": "+254 700 000007"
+  },
+  {
+    "chain_name": "Quickmart",
+    "branch_name": "Quickmart Hurlingham",
+    "town": "Nairobi",
+    "county": "Nairobi",
+    "gps_latitude": -1.2956,
+    "gps_longitude": 36.7814,
+    "address": "Hurlingham, Nairobi",
+    "phone_number": "+254 700 000008"
+  },
+  {
+    "chain_name": "Chandarana",
+    "branch_name": "Chandarana Nyeri",
+    "town": "Nyeri",
+    "county": "Nyeri",
+    "gps_latitude": -0.4201,
+    "gps_longitude": 36.9476,
+    "address": "Kimathi Way, Nyeri Town, Nyeri",
+    "phone_number": "+254 700 000009"
+  },
+  {
+    "chain_name": "Chandarana",
+    "branch_name": "Chandarana Nakuru",
+    "town": "Nakuru",
+    "county": "Nakuru",
+    "gps_latitude": -0.3031,
+    "gps_longitude": 36.0803,
+    "address": "Kenya Road, Nakuru Town",
+    "phone_number": "+254 700 000010"
+  },
+  {
+    "chain_name": "Naivas",
+    "branch_name": "Naivas Nyeri",
+    "town": "Nyeri",
+    "county": "Nyeri",
+    "gps_latitude": -0.4198,
+    "gps_longitude": 36.9487,
+    "address": "Mweiga Road, Nyeri",
+    "phone_number": "+254 700 000011"
+  },
+  {
+    "chain_name": "Naivas",
+    "branch_name": "Naivas Nakuru",
+    "town": "Nakuru",
+    "county": "Nakuru",
+    "gps_latitude": -0.3002,
+    "gps_longitude": 36.0789,
+    "address": "Nakuru Township, Nakuru",
+    "phone_number": "+254 700 000012"
+  }
+]

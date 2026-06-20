@@ -1,0 +1,386 @@
+[
+  {
+    "name": "Maize Flour (Unga)",
+    "category": "Grains and Cereals",
+    "brand": "Ajiko",
+    "sizes_variants": ["1kg", "2kg"],
+    "swahili_aliases": ["unga"],
+    "sheng_aliases": ["unga power"]
+  },
+  {
+    "name": "Granulated Sugar",
+    "category": "Sugars and Sweeteners",
+    "brand": "Kabras",
+    "sizes_variants": ["500g", "1kg", "2kg"],
+    "swahili_aliases": ["sukari"],
+    "sheng_aliases": ["sukari nguru"]
+  },
+  {
+    "name": "Cooking Oil",
+    "category": "Oils and Fats",
+    "brand": "Bidco",
+    "sizes_variants": ["500ml", "1L", "2L", "5L"],
+    "swahili_aliases": ["mafuta ya kupika"],
+    "sheng_aliases": ["mafuta"]
+  },
+  {
+    "name": "White Bread",
+    "category": "Bakery",
+    "brand": "Sunrise",
+    "sizes_variants": ["400g", "800g"],
+    "swahili_aliases": ["mkate"],
+    "sheng_aliases": ["mkate"]
+  },
+  {
+    "name": "Fresh Milk",
+    "category": "Dairy",
+    "brand": "Brookside",
+    "sizes_variants": ["500ml", "1L", "2L"],
+    "swahili_aliases": ["maziwa"],
+    "sheng_aliases": ["maziwa"]
+  },
+  {
+    "name": "Eggs",
+    "category": "Dairy",
+    "brand": "Kenchic",
+    "sizes_variants": ["dozen (6 pcs)", "dozen (12 pcs)"],
+    "swahili_aliases": ["mayai"],
+    "sheng_aliases": ["mayai"]
+  },
+  {
+    "name": "Rice",
+    "category": "Grains and Cereals",
+    "brand": "Mwea",
+    "sizes_variants": ["1kg", "2kg", "5kg"],
+    "swahili_aliases": ["mchele"],
+    "sheng_aliases": ["mchele"]
+  },
+  {
+    "name": "Tea Leaves",
+    "category": "Beverages",
+    "brand": "Ketepa",
+    "sizes_variants": ["100g", "250g", "500g"],
+    "swahili_aliases": ["chai"],
+    "sheng_aliases": ["majani", "tea bags"]
+  },
+  {
+    "name": "Salt",
+    "category": "Spices and Seasonings",
+    "brand": "Bamboo",
+    "sizes_variants": ["500g", "1kg"],
+    "swahili_aliases": ["chumvi"],
+    "sheng_aliases": ["chumvi"]
+  },
+  {
+    "name": "Wheat Flour",
+    "category": "Grains and Cereals",
+    "brand": "Grameen",
+    "sizes_variants": ["1kg", "2kg"],
+    "swahili_aliases": ["unga wa ngano"],
+    "sheng_aliases": ["flour"]
+  },
+  {
+    "name": "Sorghum",
+    "category": "Grains and Cereals",
+    "brand": "Kenblest",
+    "sizes_variants": ["500g", "1kg"],
+    "swahili_aliases": ["mtama"],
+    "sheng_aliases": ["mtama"]
+  },
+  {
+    "name": "Millet",
+    "category": "Grains and Cereals",
+    "brand": "Grameen",
+    "sizes_variants": ["500g", "1kg"],
+    "swahili_aliases": ["mtama"],
+    "sheng_aliases": ["mtama"]
+  },
+  {
+    "name": "Brown Sugar",
+    "category": "Sugars and Sweeteners",
+    "brand": "Kabras",
+    "sizes_variants": ["500g", "1kg"],
+    "swahili_aliases": ["sukari"],
+    "sheng_aliases": ["sukari"]
+  },
+  {
+    "name": "Honey",
+    "category": "Sugars and Sweeteners",
+    "brand": "Bee Natural",
+    "sizes_variants": ["250g", "500g"],
+    "swahili_aliases": ["asali"],
+    "sheng_aliases": ["asali"]
+  },
+  {
+    "name": "Jam",
+    "category": "Sugars and Sweeteners",
+    "brand": "Delmonte",
+    "sizes_variants": ["400g", "1kg"],
+    "swahili_aliases": ["jamu"],
+    "sheng_aliases": ["jam"]
+  },
+  {
+    "name": "Butter",
+    "category": "Oils and Fats",
+    "brand": "Brookside",
+    "sizes_variants": ["250g", "500g"],
+    "swahili_aliases": ["boteri"],
+    "sheng_aliases": ["butter"]
+  },
+  {
+    "name": "Margarine",
+    "category": "Oils and Fats",
+    "brand": "Rama",
+    "sizes_variants": ["250g", "500g"],
+    "swahili_aliases": ["margareen"],
+    "sheng_aliases": ["bb"]
+  },
+  {
+    "name": "Ghee",
+    "category": "Oils and Fats",
+    "brand": "Brookside Ghee",
+    "sizes_variants": ["250g", "500g"],
+    "swahili_aliases": ["samni"],
+    "sheng_aliases": ["samni"]
+  },
+  {
+    "name": "Brown Bread",
+    "category": "Bakery",
+    "brand": "Sunrise",
+    "sizes_variants": ["400g", "800g"],
+    "swahili_aliases": ["mkate"],
+    "sheng_aliases": ["mkate"]
+  },
+  {
+    "name": "Buns",
+    "category": "Bakery",
+    "brand": "Sunrise",
+    "sizes_variants": ["4x80g", "6x70g"],
+    "swahili_aliases": ["buns"],
+    "sheng_aliases": ["buns"]
+  },
+  {
+    "name": "Cookies",
+    "category": "Bakery",
+    "brand": "Sunrise",
+    "sizes_variants": ["200g", "400g"],
+    "swahili_aliases": ["biscuiti"],
+    "sheng_aliases": ["cookies"]
+  },
+  {
+    "name": "Yogurt",
+    "category": "Dairy",
+    "brand": "Brookside",
+    "sizes_variants": ["200g", "400g", "1kg"],
+    "swahili_aliases": ["yogerti"],
+    "sheng_aliases": ["yoghurt"]
+  },
+  {
+    "name": "Cheese",
+    "category": "Dairy",
+    "brand": "Brookside",
+    "sizes_variants": ["200g", "400g"],
+    "swahili_aliases": ["jibini"],
+    "sheng_aliases": ["cheese"]
+  },
+  {
+    "name": "Cream",
+    "category": "Dairy",
+    "brand": "Brookside",
+    "sizes_variants": ["200ml", "500ml"],
+    "swahili_aliases": ["kribu"],
+    "sheng_aliases": ["cream"]
+  },
+  {
+    "name": "Coffee",
+    "category": "Beverages",
+    "brand": "Ketepa",
+    "sizes_variants": ["50g", "100g", "250g"],
+    "swahili_aliases": ["kahawa"],
+    "sheng_aliases": ["kahawa"]
+  },
+  {
+    "name": "Juice",
+    "category": "Beverages",
+    "brand": "Delmonte",
+    "sizes_variants": ["250ml", "500ml", "1L"],
+    "swahili_aliases": ["jasho"],
+    "sheng_aliases": ["juice"]
+  },
+  {
+    "name": "Soft Drinks",
+    "category": "Beverages",
+    "brand": "Coca-Cola",
+    "sizes_variants": ["330ml", "500ml", "1L", "2L"],
+    "swahili_aliases": ["soda"],
+    "sheng_aliases": ["soda"]
+  },
+  {
+    "name": "Water",
+    "category": "Beverages",
+    "brand": "Dasani",
+    "sizes_variants": ["500ml", "1L", "1.5L"],
+    "swahili_aliases": ["maji"],
+    "sheng_aliases": ["maji"]
+  },
+  {
+    "name": "Black Pepper",
+    "category": "Spices and Seasonings",
+    "brand": "Bamboo",
+    "sizes_variants": ["50g", "100g"],
+    "swahili_aliases": ["pilipili manga"],
+    "sheng_aliases": ["paprika"]
+  },
+  {
+    "name": "Curry Powder",
+    "category": "Spices and Seasonings",
+    "brand": "MDH",
+    "sizes_variants": ["50g", "100g"],
+    "swahili_aliases": ["pavu ya karri"],
+    "sheng_aliases": ["pavu"]
+  },
+  {
+    "name": "Royco",
+    "category": "Spices and Seasonings",
+    "brand": "Royco",
+    "sizes_variants": ["50g", "100g"],
+    "swahili_aliases": ["royco"],
+    "sheng_aliases": ["royco"]
+  },
+  {
+    "name": "Garlic",
+    "category": "Spices and Seasonings",
+    "brand": "Fresh Garlic",
+    "sizes_variants": ["50g", "100g"],
+    "swahili_aliases": ["utunguu"],
+    "sheng_aliases": ["itunguu"]
+  },
+  {
+    "name": "Tomatoes",
+    "category": "Canned Foods",
+    "brand": "Alliance",
+    "sizes_variants": ["400g", "800g"],
+    "swahili_aliases": ["nyanya"],
+    "sheng_aliases": ["nyanya"]
+  },
+  {
+    "name": "Beans",
+    "category": "Canned Foods",
+    "brand": "Alliance",
+    "sizes_variants": ["400g", "800g"],
+    "swahili_aliases": ["maharagwe"],
+    "sheng_aliases": ["maharagwe"]
+  },
+  {
+    "name": "Tuna",
+    "category": "Canned Foods",
+    "brand": "Alliance",
+    "sizes_variants": ["185g"],
+    "swahili_aliases": ["tuna"],
+    "sheng_aliases": ["tuna"]
+  },
+  {
+    "name": "Peas",
+    "category": "Canned Foods",
+    "brand": "Alliance",
+    "sizes_variants": ["400g"],
+    "swahili_aliases": ["ngere"],
+    "sheng_aliases": ["ngere"]
+  },
+  {
+    "name": "Corn",
+    "category": "Canned Foods",
+    "brand": "Alliance",
+    "sizes_variants": ["400g"],
+    "swahili_aliases": ["mahindi"],
+    "sheng_aliases": ["mahindi"]
+  },
+  {
+    "name": "Bar Soap",
+    "category": "Personal Care",
+    "brand": "Protex",
+    "sizes_variants": ["100g", "200g"],
+    "swahili_aliases": ["sabuni"],
+    "sheng_aliases": ["sabuni"]
+  },
+  {
+    "name": "Toothpaste",
+    "category": "Personal Care",
+    "brand": "Colgate",
+    "sizes_variants": ["50ml", "100ml"],
+    "swahili_aliases": ["paste ya meno"],
+    "sheng_aliases": ["paste"]
+  },
+  {
+    "name": "Shampoo",
+    "category": "Personal Care",
+    "brand": "Pantene",
+    "sizes_variants": ["200ml", "400ml"],
+    "swahili_aliases": ["shampuu"],
+    "sheng_aliases": ["shampoo"]
+  },
+  {
+    "name": "Sanitary Pads",
+    "category": "Personal Care",
+    "brand": "Always",
+    "sizes_variants": ["8 count", "16 count"],
+    "swahili_aliases": ["mapambano"],
+    "sheng_aliases": ["pads"]
+  },
+  {
+    "name": "Diapers",
+    "category": "Personal Care",
+    "brand": "Pampers",
+    "sizes_variants": ["20 count", "40 count"],
+    "swahili_aliases": ["pampers"],
+    "sheng_aliases": ["pampers"]
+  },
+  {
+    "name": "Washing Powder",
+    "category": "Household",
+    "brand": "OMO",
+    "sizes_variants": ["500g", "1kg", "2kg"],
+    "swahili_aliases": ["deterjent"],
+    "sheng_aliases": ["detergent"]
+  },
+  {
+    "name": "Dishwashing Liquid",
+    "category": "Household",
+    "brand": "Sunlight",
+    "sizes_variants": ["500ml", "1L"],
+    "swahili_aliases": ["saveiyon"],
+    "sheng_aliases": ["saveiyon"]
+  },
+  {
+    "name": "Matches",
+    "category": "Household",
+    "brand": "Boxer",
+    "sizes_variants": ["1 box (40 sticks)"],
+    "swahili_aliases": ["kichawi"],
+    "sheng_aliases": ["matches"]
+  },
+  {
+    "name": "Candles",
+    "category": "Household",
+    "brand": "Glad",
+    "sizes_variants": ["2x6\"", "1x12\""],
+    "swahili_aliases": ["mishipa"],
+    "sheng_aliases": ["candles"]
+  },
+  {
+    "name": "Trash Bags",
+    "category": "Household",
+    "brand": "Hipo",
+    "sizes_variants": ["10 count", "30 count"],
+    "swahili_aliases": ["bendera"],
+    "sheng_aliases": ["bags"]
+  },
+  {
+    "name": "Bucket",
+    "category": "Household",
+    "brand": "Generic",
+    "sizes_variants": ["5L", "10L"],
+    "swahili_aliases": ["baaki"],
+    "sheng_aliases": ["bucket"]
+  }
+]
