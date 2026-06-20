@@ -6,6 +6,7 @@ import scrapy
 from typing import Generator, Dict, Any, Optional
 from urllib.parse import urljoin, urlparse
 import re
+import logging
 from ..base_spider import BasePricePoaSpider
 from ..middleware.playwright_middleware import PlaywrightMiddleware
 
@@ -64,16 +65,16 @@ class NaivasSpider(BasePricePoaSpider):
         # Extract category links from navigation or homepage
         category_links = response.css(
             'nav a[href*="/category"], .menu-item a[href*="/shop"], .category-link'
-        )::attr(href)'.getall()
+        )::attr('href').getall()
 
         # Also look for category images or banners
         category_links += response.css(
             '.category-banner a, .product-category a, [class*="category"] a'
-        )::attr(href)'.getall()
+        )::attr('href').getall()
 
         # If no specific category links found, try to infer from common patterns
         if not category_links:
-            category_links = response.css('a[href*]')::attr(hdf)'.re(r'/category/[\w\-/]+')
+            category_links = response.css('a[href*]').re(r'/category/[\w\-/]+')
 
         # Follow category links
         for link in set(category_links):  # Remove duplicates
@@ -95,13 +96,13 @@ class NaivasSpider(BasePricePoaSpider):
         # Extract product links
         product_links = response.css(
             '.product-item a, .product-link, [data-testid="product-link"]'
-        )::attr(href)'.getall()
+        )::attr('href').getall()
 
         # Fallback selectors
         if not product_links:
             product_links = response.css(
                 '.product-card a, .item-link, a[href*="/product/"]'
-            )::attr(href)'.getall()
+            )::attr('href').getall()
 
         # Follow product links
         for link in set(product_links):
@@ -116,7 +117,7 @@ class NaivasSpider(BasePricePoaSpider):
         # Handle pagination
         next_page = response.css(
             'a[rel="next"], .next-page, .pagination__next'
-        )::attr(href)'.get()
+        )::attr('href').get()
         if next_page:
             if not next_page.startswith('http'):
                 next_page = urljoin(response.url, next_page)

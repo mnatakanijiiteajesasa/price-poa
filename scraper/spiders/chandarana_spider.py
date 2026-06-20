@@ -56,7 +56,7 @@ class ChandaranaSpider(BasePricePoaSpider):
         # Extract category links
         category_links = response.css(
             'a[href*="/shop/"], .category-link, .menu-item a[href*="/category/"]'
-        )::attr(href)'.getall()
+        )::attr('href').getall()
 
         for link in set(category_links):
             if link:
@@ -77,7 +77,7 @@ class ChandaranaSpider(BasePricePoaSpider):
         # Extract product links
         product_links = response.css(
             '.product-item a, .product-link, a[href*="/item/"]'
-        )::attr(href)'.getall()
+        )::attr('href').getall()
 
         for link in set(product_links):
             if link:

@@ -3,6 +3,7 @@ Scrapy spider for scraping prices from Carrefour Kenya Online.
 """
 import scrapy
 import logging
+import re
 from ..base_spider import BasePricePoaSpider
 from ..middleware.playwright_middleware import PlaywrightMiddleware
 
@@ -55,7 +56,7 @@ class CarrefourSpider(BasePricePoaSpider):
         # Extract category links - adjust selectors based on actual site structure
         category_links = response.css(
             'a[href*="/c/"], .category-link, .menu-item a[href*="/groceries/"]'
-        )::attr(href)'.getall()
+        )::attr('href').getall()
 
         for link in set(category_links):
             if link:
@@ -76,7 +77,7 @@ class CarrefourSpider(BasePricePoaSpider):
         # Extract product links
         product_links = response.css(
             '.product-item a, .product-link, a[href*="/p/"]'
-        )::attr(href)'.getall()
+        )::attr('href').getall()
 
         for link in set(product_links):
             if link:
@@ -148,7 +149,7 @@ class CarrefourSpider(BasePricePoaSpider):
                 promotion_details = self._extract_text(response, [
                     '.promo-details::text',
                     '.offer-text::text',
-                    '.badge-sale::text'
+                    '.badge-sale::text, .label-offer::text'
                 ])
 
             # Create item
