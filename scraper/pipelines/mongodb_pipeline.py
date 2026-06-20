@@ -34,7 +34,11 @@ class MongoDBPipeline:
     async def open_spider(self, spider: scrapy.Spider):
         """Initialize MongoDB connection when spider opens."""
         try:
-            from ..database.connection import get_database
+            # Fix import to work when run from scraper context
+            import sys
+            import os
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'database'))
+            from connection import get_database
             self.db = await get_database()
             logger.info(f"MongoDBPipeline connected to database for spider {spider.name}")
         except Exception as e:

@@ -154,7 +154,7 @@ class ScrapeScheduler:
             logger.error(f"Error pausing job {job_id}: {e}")
             return False
 
-    def resume_job(self, job_id: str) => bool:
+    def resume_job(self, job_id: str) -> bool:
         """Resume a paused job."""
         if job_id not in self.jobs:
             logger.warning(f"Job {job_id} not found")
