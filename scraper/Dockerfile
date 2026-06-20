@@ -5,14 +5,17 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Copy the requirements file and install dependencies
-COPY requirements.txt .
+COPY scraper/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright browsers
 RUN playwright install --with-deps
 
-# Copy the rest of the application code
-COPY . .
+# Copy the scraper app code
+COPY scraper/ .
+
+# Copy the shared database package
+COPY database/ ./database
 
 # Set environment variables for scraping
 ENV SCRAPER_LOG_LEVEL=info

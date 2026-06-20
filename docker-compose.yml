@@ -75,8 +75,8 @@ services:
   # SCRAPER (Background Worker)
   scraper:
     build:
-      context: ./scraper
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: scraper/Dockerfile
     container_name: pricepoa_scraper
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
