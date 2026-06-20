@@ -35,7 +35,6 @@ class BasePricePoaSpider(Spider):
     Base spider for PricePoa scraping operations.
     Provides common functionality like JavaScript detection and store information.
     """
-    name = 'base_pricepoa_spider'  # Abstract base spider, not meant to be run directly
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
