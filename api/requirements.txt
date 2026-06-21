@@ -1,3 +1,5 @@
 FastAPI
 motor
 uvicorn
+requests
+python-dotenv
