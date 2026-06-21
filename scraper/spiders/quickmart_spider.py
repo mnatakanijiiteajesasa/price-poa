@@ -33,12 +33,12 @@ class QuickmartSpider(BasePricePoaSpider):
         'USER_AGENT': 'PricePoa Scraper - Quickmart (+https://pricepoa.co.ke)',
         # Enable our middlewares
         'DOWNLOADER_MIDDLEWARES': {
-            'scraper.middleware.playwright_middleware.PlaywrightMiddleware': 543,
-            'scraper.middleware.deduplication_middleware.PriceDeduplicationMiddleware': 544,
+            'middleware.playwright_middleware.PlaywrightMiddleware': 543,
+            'middleware.deduplication_middleware.PriceDeduplicationMiddleware': 544,
         },
         'ITEM_PIPELINES': {
-            'scraper.pipelines.validation_pipeline.PriceValidationPipeline': 300,
-            'scraper.pipelines.mongodb_pipeline.MongoDBPipeline': 400,
+            'pipelines.validation_pipeline.PriceValidationPipeline': 300,
+            'pipelines.mongodb_pipeline.MongoDBPipeline': 400,
         },
     }
 
