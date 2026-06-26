@@ -1,12 +1,21 @@
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 import os
+import sys
 from motor.motor_asyncio import AsyncIOMotorClient
 import requests
 import hmac
 import hashlib
 import json
 import logging
+from io import BytesIO
+
+# Add project root to sys.path to allow imports from sibling directories
+sys.path.append('/home/mogaka/projects/Price-Poa')
+from infographics.generator import (
+    generate_single_product_image,
+    generate_shopping_list_image,
+)
 
 app = FastAPI(title="PricePoa API", description="AI agent for Kenyan grocery price comparisons")
 
@@ -22,9 +31,10 @@ META_API_VERSION = os.getenv("META_API_VERSION", "v18.0")
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
 
-def send_whatsapp_message(to: str, message: str) -> bool:
+
+def send_whatsapp_text(to: str, message: str) -> bool:
     """
-    Send a WhatsApp message via Meta Cloud API.
+    Send a WhatsApp text message via Meta Cloud API.
     Returns True if successful, False otherwise.
     """
     url = f"https://graph.facebook.com/{META_API_VERSION}/{META_WHATSAPP_PHONE_NUMBER_ID}/messages"
@@ -43,50 +53,142 @@ def send_whatsapp_message(to: str, message: str) -> bool:
     try:
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
-        logger.info(f"Sent WhatsApp message to {to}: {message}")
+        logger.info(f"Sent WhatsApp text message to {to}: {message}")
         return True
     except Exception as e:
-        logger.error(f"Failed to send WhatsApp message: {e}")
+        logger.error(f"Failed to send WhatsApp text message: {e}")
         return False
 
-def verify_signature(request_body: bytes, signature_header: str) -> bool:
-    """
-    Verify the HMAC-SHA256 signature for Meta webhook.
-    Expects signature_header like 'sha256=<hex_string>'.
-    """
-    if not META_APP_SECRET:
-        # If no secret is set, skip verification (for development)
-        logger.warning("No app secret set, skipping signature verification")
-        return True
-    # Remove 'sha256=' prefix if present
-    if signature_header.startswith('sha256='):
-        signature_header = signature_header[7:]
-    # Compute expected signature
-    expected_signature = hmac.new(
-        META_APP_SECRET.encode('utf-8'),
-        request_body,
-        hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(expected_signature, signature_header)
 
-async def process_whatsapp_message(from_number: str, text: str) -> str:
+def send_whatsapp_image(to: str, image_bytes: bytes) -> bool:
     """
-    Process an incoming WhatsApp message and generate a reply.
-    This is where the NLP, query, and response generation will happen.
-    For now, we return a fixed response.
+    Send a WhatsApp image via Meta Cloud API.
+    Returns True if successful, False otherwise.
+    Steps:
+    1. Upload the image to get a media ID.
+    2. Send a message with the image media ID.
+    """
+    # Step 1: Upload media
+    upload_url = f"https://graph.facebook.com/{META_API_VERSION}/{META_WHATSAPP_PHONE_NUMBER_ID}/media"
+    files = {
+        'file': ('image.png', image_bytes, 'image/png')
+    }
+    data = {
+        'messaging_product': 'whatsapp'
+    }
+    headers = {
+        "Authorization": f"Bearer {META_WHATSAPP_ACCESS_TOKEN}"
+    }
+    try:
+        upload_response = requests.post(upload_url, headers=headers, data=data, files=files)
+        upload_response.raise_for_status()
+        media_id = upload_response.json()["id"]
+        logger.info(f"Uploaded image, media ID: {media_id}")
+    except Exception as e:
+        logger.error(f"Failed to upload image to WhatsApp: {e}")
+        return False
+
+    # Step 2: Send the image message
+    send_url = f"https://graph.facebook.com/{META_API_VERSION}/{META_WHATSAPP_PHONE_NUMBER_ID}/messages"
+    send_headers = {
+        "Authorization": f"Bearer {META_WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    send_data = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "image",
+        "image": {
+            "id": media_id
+        }
+    }
+    try:
+        send_response = requests.post(send_url, headers=send_headers, json=send_data)
+        send_response.raise_for_status()
+        logger.info(f"Sent WhatsApp image message to {to} with media ID {media_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send WhatsApp image message: {e}")
+        return False
+
+
+async def process_whatsapp_message(from_number: str, text: str) -> dict:
+    """
+    Process an incoming WhatsApp message and return structured data for an infographic.
+    For now, we return a placeholder single product or shopping list based on simple heuristics.
     """
     logger.info(f"Processing message from {from_number}: {text}")
 
     # TODO: Implement NLP intent classification and entity extraction
     # TODO: Query the database for prices
-    # TODO: Format the response
+    # TODO: Format the response data
 
-    # Placeholder response
-    return f"Received your message: '{text}'. This is a placeholder response. The full agent is under development."
+    # Simple heuristic: if the message contains words like "list", "basket", "shopping", "buy", "get"
+    # then we assume a shopping list, else a single product.
+    text_lower = text.lower()
+    shopping_keywords = ["list", "basket", "shopping", "buy", "get", "shop", "market"]
+    if any(keyword in text_lower for keyword in shopping_keywords):
+        # Return a placeholder shopping list with multiple stores
+        return {
+            "type": "shopping_list",
+            "data": {
+                "stores": [
+                    {
+                        "name": "Naivas",
+                        "total": "410 KES",
+                        "items": [
+                            {"name": "Tomatoes", "price": "120 KES"},
+                            {"name": "Milk", "price": "60 KES"},
+                            {"name": "Bread", "price": "50 KES"},
+                            {"name": "Eggs", "price": "180 KES"}
+                        ]
+                    },
+                    {
+                        "name": "Quickmart",
+                        "total": "390 KES",
+                        "items": [
+                            {"name": "Tomatoes", "price": "110 KES"},
+                            {"name": "Milk", "price": "55 KES"},
+                            {"name": "Bread", "price": "48 KES"},
+                            {"name": "Eggs", "price": "177 KES"}
+                        ]
+                    },
+                    {
+                        "name": "Chandarana",
+                        "total": "420 KES",
+                        "items": [
+                            {"name": "Tomatoes", "price": "130 KES"},
+                            {"name": "Milk", "price": "65 KES"},
+                            {"name": "Bread", "price": "52 KES"},
+                            {"name": "Eggs", "price": "183 KES"}
+                        ]
+                    }
+                ],
+                "recommendation": "Quickmart - Lowest total",
+                "savings": "20 KES vs Naivas",
+                "date": "2026-06-26"
+            }
+        }
+    else:
+        # Return a placeholder single product with multiple stores
+        return {
+            "type": "single_product",
+            "data": {
+                "product_name": "Tomatoes (1kg)",
+                "stores": [
+                    {"name": "Naivas", "price": "120 KES", "offer": False},
+                    {"name": "Quickmart", "price": "110 KES", "offer": True},
+                    {"name": "Chandarana", "price": "130 KES", "offer": False}
+                ],
+                "date": "2026-06-26"
+            }
+        }
+
 
 @app.get("/")
 async def root():
     return {"message": "PricePoa API is running"}
+
 
 @app.get("/health")
 async def health_check():
@@ -103,6 +205,7 @@ async def health_check():
             "mongodb_db": mongodb_db
         }
     )
+
 
 @app.api_route("/webhook/whatsapp", methods=["GET", "POST"])
 async def whatsapp_webhook(request: Request):
@@ -130,6 +233,7 @@ async def whatsapp_webhook(request: Request):
         except json.JSONDecodeError:
             logger.error("Invalid JSON in WhatsApp webhook payload")
             raise HTTPException(status_code=400, detail="Invalid JSON")
+
         # Extract message details
         try:
             entry = payload.get("entry", [])[0]
@@ -145,6 +249,7 @@ async def whatsapp_webhook(request: Request):
                 return JSONResponse(status_code=200, content={"status": "ok"})
             message = messages[0]
             from_number = message.get("from")
+            # Only handle text messages for now
             if message.get("type") == "text":
                 text = message.get("text", {}).get("body", "").strip()
             else:
@@ -153,23 +258,113 @@ async def whatsapp_webhook(request: Request):
         except (IndexError, KeyError, TypeError) as e:
             logger.error(f"Failed to parse WhatsApp webhook payload: {e}")
             raise HTTPException(status_code=400, detail="Invalid payload structure")
+
         if not from_number or not text:
             logger.error("Missing 'from' or 'text' in WhatsApp webhook payload")
             raise HTTPException(status_code=400, detail="Missing required fields")
-        # Process the message and generate a reply
-        reply_text = await process_whatsapp_message(from_number, text)
-        # Send the reply
-        success = send_whatsapp_message(from_number, reply_text)
+
+        # Process the message to get structured data for infographic
+        try:
+            processed = await process_whatsapp_message(from_number, text)
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+            # Fallback to a simple text message
+            fallback_text = "Sorry, I encountered an error processing your request. Please try again."
+            success = send_whatsapp_text(from_number, fallback_text)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "accepted",
+                    "message": "Message processed with error fallback"
+                }
+            )
+
+        # Generate image based on type
+        image_bytes = None
+        try:
+            if processed["type"] == "single_product":
+                image_bytes = generate_single_product_image(processed["data"])
+            elif processed["type"] == "shopping_list":
+                image_bytes = generate_shopping_list_image(processed["data"])
+            else:
+                logger.warning(f"Unknown message type: {processed['type']}")
+                image_bytes = None
+        except Exception as e:
+            logger.error(f"Error generating image: {e}")
+            image_bytes = None
+
+        # Try to send image if we have it
+        if image_bytes is not None:
+            success = send_whatsapp_image(from_number, image_bytes)
+            if success:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "accepted",
+                        "message": "Image sent successfully"
+                    }
+                )
+            else:
+                logger.warning("Failed to send image, falling back to text")
+
+        # Fallback to text message
+        # Generate a simple text summary from the data
+        if processed["type"] == "single_product":
+            data = processed["data"]
+            text_lines = [
+                f"Product: {data.get('product_name', 'N/A')}",
+                f"Price: {data.get('price', 'N/A')}",
+                f"Store: {data.get('store', 'N/A')}",
+            ]
+            if data.get('unit'):
+                text_lines.append(f"Unit: {data['unit']}")
+            if data.get('note'):
+                text_lines.append(f"Note: {data['note']}")
+            fallback_text = "\n".join(text_lines)
+        else:  # shopping list
+            data = processed["data"]
+            lines = [f"{i+1}. {item.get('name', 'Item')} - {item.get('price', 'N/A')} at {item.get('store', 'Store')}"
+                     for i, item in enumerate(data.get('items', []))]
+            if data.get('total'):
+                lines.append(f"Total: {data['total']}")
+            fallback_text = "Shopping List:\n" + "\n".join(lines)
+
+        # Send the fallback text
+        success = send_whatsapp_text(from_number, fallback_text)
         if not success:
-            logger.error(f"Failed to send reply to {from_number}")
+            logger.error("Failed to send fallback text message")
+
         return JSONResponse(
             status_code=200,
             content={
                 "status": "accepted",
-                "message": "Message processed"
+                "message": "Message processed with fallback text"
             }
         )
 
+
+def verify_signature(request_body: bytes, signature_header: str) -> bool:
+    """
+    Verify the HMAC-SHA256 signature for Meta webhook.
+    Expects signature_header like 'sha256=<hex_string>'.
+    """
+    if not META_APP_SECRET:
+        # If no secret is set, skip verification (for development)
+        logger.warning("No app secret set, skipping signature verification")
+        return True
+    # Remove 'sha256=' prefix if present
+    if signature_header.startswith('sha256='):
+        signature_header = signature_header[7:]
+    # Compute expected signature
+    expected_signature = hmac.new(
+        META_APP_SECRET.encode('utf-8'),
+        request_body,
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected_signature, signature_header)
+
+
+# The test endpoints remain unchanged
 @app.get("/test/db")
 async def test_database_connection():
     """Test endpoint to verify MongoDB connection and basic operations."""
@@ -217,6 +412,7 @@ async def test_database_connection():
                 "message": f"MongoDB connection test failed: {str(e)}"
             }
         )
+
 
 @app.get("/test/prices/recent")
 async def get_recent_prices(limit: int = 10):

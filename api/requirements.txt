@@ -3,3 +3,4 @@ motor
 uvicorn
 requests
 python-dotenv
+Pillow
