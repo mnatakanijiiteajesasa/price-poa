@@ -311,23 +311,30 @@ async def whatsapp_webhook(request: Request):
         # Generate a simple text summary from the data
         if processed["type"] == "single_product":
             data = processed["data"]
-            text_lines = [
-                f"Product: {data.get('product_name', 'N/A')}",
-                f"Price: {data.get('price', 'N/A')}",
-                f"Store: {data.get('store', 'N/A')}",
-            ]
-            if data.get('unit'):
-                text_lines.append(f"Unit: {data['unit']}")
-            if data.get('note'):
-                text_lines.append(f"Note: {data['note']}")
+            text_lines = [f"Product: {data.get('product_name', 'N/A')}"]
+            stores = data.get("stores", [])
+            if stores:
+                text_lines.append("Prices per store:")
+                for store in stores:
+                    text_lines.append(f"  {store.get('name', 'Unknown')}: {store.get('price', 'N/A')}")
+                    if store.get('offer'):
+                        text_lines[-1] += " (Offer!)"
+            text_lines.append(f"Date: {data.get('date', 'N/A')}")
             fallback_text = "\n".join(text_lines)
         else:  # shopping list
             data = processed["data"]
-            lines = [f"{i+1}. {item.get('name', 'Item')} - {item.get('price', 'N/A')} at {item.get('store', 'Store')}"
-                     for i, item in enumerate(data.get('items', []))]
-            if data.get('total'):
-                lines.append(f"Total: {data['total']}")
-            fallback_text = "Shopping List:\n" + "\n".join(lines)
+            lines = [f"Shopping List Comparison:"]
+            stores = data.get("stores", [])
+            for store in stores:
+                lines.append(f"  {store.get('name', 'Unknown')}: {store.get('total', 'N/A')}")
+            recommendation = data.get("recommendation", "")
+            if recommendation:
+                lines.append(f"Recommendation: {recommendation}")
+            savings = data.get("savings", "")
+            if savings:
+                lines.append(f"Savings: {savings}")
+            lines.append(f"Date: {data.get('date', 'N/A')}")
+            fallback_text = "\n".join(lines)
 
         # Send the fallback text
         success = send_whatsapp_text(from_number, fallback_text)
