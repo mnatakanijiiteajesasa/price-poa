@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -104,121 +104,179 @@ async def health_check():
         }
     )
 
-@app.post("/webhook/whatsapp")
+@app.api_route("/webhook/whatsapp", methods=["GET", "POST"])
 async def whatsapp_webhook(request: Request):
-    """
-    Webhook to receive incoming WhatsApp messages from Meta Cloud API.
-    Handles GET verification and POST message notifications.
-    """
-    # GET request for webhook verification (Meta uses query params)
     if request.method == "GET":
-        # For FastAPI, we need to get query params via request.query_params
-        # However, this endpoint is only declared as POST; GET will not reach here.
-        # To support verification, we need to allow both GET and POST.
-        # Let's change the route to accept both methods.
-        pass
-
-    # Since we only declared POST, we need to adjust: we'll change the decorator to accept both.
-    # We'll handle it below by checking request.method.
-
-    # Get the raw body for signature verification
-    body = await request.body()
-
-    # Get the signature from headers (Meta uses 'X-Hub-Signature-256')
-    signature = request.headers.get("X-Hub-Signature-256", "")
-
-    # Verify the signature
-    if not verify_signature(body, signature):
-        logger.warning("Invalid signature for WhatsApp webhook")
-        raise HTTPException(status_code=401, detail="Invalid signature")
-
-    # Parse the JSON payload
-    try:
-        payload = json.loads(body.decode('utf-8'))
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON in WhatsApp webhook payload")
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-
-    # Meta payload structure:
-    # {
-    #   "object": "whatsapp_business_account",
-    #   "entry": [
-    #     {
-    #       "id": "...",
-    #       "changes": [
-    #         {
-    #           "value": {
-    #             "messaging_product": "whatsapp",
-    #             "metadata": {
-    #               "display_phone_number": "...",
-    #               "phone_number_id": "..."
-    #             },
-    #             "contacts": [...],
-    #             "messages": [
-    #               {
-    #                 "from": "...",
-    #                 "id": "...",
-    #                 "timestamp": "...",
-    #                 "type": "text",
-    #                 "text": { "body": "..." }
-    #               }
-    #             ]
-    #           },
-    #           "field": "messages"
-    #         }
-    #       ]
-    #     }
-    #   ]
-    # }
-
-    # Extract message details
-    try:
-        entry = payload.get("entry", [])[0]
-        changes = entry.get("changes", [])[0]
-        value = changes.get("value", {})
-        # Handle status updates (ignore for now)
-        if "status"status := value.get("status"):
-            logger.info(f"Received status update: {status}")
-            return JSONResponse(status_code=200, content={"status": "ok"})
-        messages = value.get("messages", [])
-        if not messages:
-            logger.info("No messages in webhook payload")
-            return JSONResponse(status_code=200, content={"status": "ok"})
-        message = messages[0]
-        from_number = message.get("from")
-        # Only handle text messages for now
-        if message.get("type") == "text":
-            text = message.get("text", {}).get("body", "").strip()
+        # Webhook verification (GET)
+        params = request.query_params
+        mode = params.get("hub.mode")
+        token = params.get("hub.verify_token")
+        challenge = params.get("hub.challenge")
+        if mode == "subscribe" and token == META_WHATSAPP_VERIFY_TOKEN:
+            logger.info("Webhook verified")
+            return Response(content=challenge, media_type="text/plain")
         else:
-            # For non-text, we can ignore or handle differently
-            logger.info(f"Received non-text message type: {message.get('type')}")
-            return JSONResponse(status_code=200, content={"status": "ok"})
-    except (IndexError, KeyError, TypeError) as e:
-        logger.error(f"Failed to parse WhatsApp webhook payload: {e}")
-        raise HTTPException(status_code=400, detail="Invalid payload structure")
+            logger.warning("Webhook verification failed")
+            raise HTTPException(status_code=403, detail="Verification failed")
+    else:
+        # Handle incoming messages (POST)
+        body = await request.body()
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        if not verify_signature(body, signature):
+            logger.warning("Invalid signature for WhatsApp webhook")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+        try:
+            payload = json.loads(body.decode('utf-8'))
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON in WhatsApp webhook payload")
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+        # Extract message details
+        try:
+            entry = payload.get("entry", [])[0]
+            changes = entry.get("changes", [])[0]
+            value = changes.get("value", {})
+            # Ignore status updates
+            if "status" in value:
+                logger.info(f"Received status update: {value['status']}")
+                return JSONResponse(status_code=200, content={"status": "ok"})
+            messages = value.get("messages", [])
+            if not messages:
+                logger.info("No messages in webhook payload")
+                return JSONResponse(status_code=200, content={"status": "ok"})
+            message = messages[0]
+            from_number = message.get("from")
+            if message.get("type") == "text":
+                text = message.get("text", {}).get("body", "").strip()
+            else:
+                logger.info(f"Received non-text message type: {message.get('type')}")
+                return JSONResponse(status_code=200, content={"status": "ok"})
+        except (IndexError, KeyError, TypeError) as e:
+            logger.error(f"Failed to parse WhatsApp webhook payload: {e}")
+            raise HTTPException(status_code=400, detail="Invalid payload structure")
+        if not from_number or not text:
+            logger.error("Missing 'from' or 'text' in WhatsApp webhook payload")
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        # Process the message and generate a reply
+        reply_text = await process_whatsapp_message(from_number, text)
+        # Send the reply
+        success = send_whatsapp_message(from_number, reply_text)
+        if not success:
+            logger.error(f"Failed to send reply to {from_number}")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "accepted",
+                "message": "Message processed"
+            }
+        )
 
-    if not from_number or not text:
-        logger.error("Missing 'from' or 'text' in WhatsApp webhook payload")
-        raise HTTPException(status_code=400, detail="Missing required fields")
+@app.get("/test/db")
+async def test_database_connection():
+    """Test endpoint to verify MongoDB connection and basic operations."""
+    try:
+        mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        mongodb_db = os.getenv("MONGODB_DB", "pricepoa")
 
-    # Process the message and generate a reply
-    reply_text = await process_whatsapp_message(from_number, text)
+        # Create client
+        client = AsyncIOMotorClient(mongodb_uri)
+        db = client[mongodb_db]
 
-    # Send the reply
-    success = send_whatsapp_message(from_number, reply_text)
-    if not success:
-        logger.error(f"Failed to send reply to {from_number}")
-        # We still return 200 to avoid retries, but log the error
+        # Test connection
+        await client.admin.command('ping')
 
-    return JSONResponse(
-        status_code=200,
-        content={
-            "status": "accepted",
-            "message": "Message processed"
-        }
-    )
+        # Get collection stats
+        products_count = await db.products.count_documents({})
+        stores_count = await db.stores.count_documents({})
+        prices_count = await db.prices.count_documents({})
 
-# Need to handle GET verification separately; change route to allow both GET and POST
-# Let's replace the decorator above with a custom route that handles both.
+        # Get sample product if exists
+        sample_product = await db.products.find_one({}, {"_id": 0})
 
-# Actually we need to redo the endpoint. Let's rewrite after this comment.
+        # Close connection
+        client.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "message": "MongoDB connection test passed",
+                "database": mongodb_db,
+                "collections": {
+                    "products": products_count,
+                    "stores": stores_count,
+                    "prices": prices_count
+                },
+                "sample_product": sample_product
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"MongoDB connection test failed: {str(e)}"
+            }
+        )
+
+@app.get("/test/prices/recent")
+async def get_recent_prices(limit: int = 10):
+    """Get recent price entries for testing."""
+    try:
+        mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        mongodb_db = os.getenv("MONGODB_DB", "pricepoa")
+
+        client = AsyncIOMotorClient(mongodb_uri)
+        db = client[mongodb_db]
+
+        # Get recent prices with product and store info
+        pipeline = [
+            {"$sort": {"verified_at": -1}},
+            {"$limit": limit},
+            {
+                "$lookup": {
+                    "from": "products",
+                    "localField": "product_id",
+                    "foreignField": "_id",
+                    "as": "product"
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "stores",
+                    "localField": "store_id",
+                    "foreignField": "_id",
+                    "as": "store"
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "price_kes": 1,
+                    "source": 1,
+                    "verified_at": 1,
+                    "is_promotional": 1,
+                    "product_name": {"$arrayElemAt": ["$product.name", 0]},
+                    "store_chain": {"$arrayElemAt": ["$store.chain_name", 0]},
+                    "store_branch": {"$arrayElemAt": ["$store.branch_name", 0]}
+                }
+            }
+        ]
+
+        recent_prices = await db.prices.aggregate(pipeline).to_list(length=None)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "message": "Recent prices retrieved",
+                "prices": recent_prices
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Failed to retrieve recent prices: {str(e)}"
+            }
+        )
