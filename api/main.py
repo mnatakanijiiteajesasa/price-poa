@@ -8,8 +8,8 @@ import logging
 # Add project root to sys.path
 sys.path.append('/home/mogaka/projects/Price-Poa')
 
-# ✓ NEW: Import WhatsApp webhook router
-from whatsapp_webhook import router as whatsapp_router
+# ✓ NEW: Import Telegram webhook router
+from telegram_webhook import router as telegram_router
 
 # Logging
 logger = logging.getLogger("uvicorn.error")
@@ -21,8 +21,8 @@ app = FastAPI(
     description="AI agent for Kenyan grocery price comparisons"
 )
 
-# ✓ NEW: Include WhatsApp webhook routes
-app.include_router(whatsapp_router)
+# ✓ NEW: Include Telegram webhook routes
+app.include_router(telegram_router)
 
 
 @app.get("/")
