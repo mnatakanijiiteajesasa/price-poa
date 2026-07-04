@@ -10,6 +10,7 @@ sys.path.append('/home/mogaka/projects/Price-Poa')
 
 # ✓ NEW: Import Telegram webhook router
 from telegram_webhook import router as telegram_router
+from telegram_bot import set_telegram_webhook
 
 # Logging
 logger = logging.getLogger("uvicorn.error")
@@ -23,6 +24,22 @@ app = FastAPI(
 
 # ✓ NEW: Include Telegram webhook routes
 app.include_router(telegram_router)
+
+
+@app.on_event("startup")
+async def register_telegram_webhook():
+    """
+    Auto-register the webhook on boot, so you never have to manually call
+    set_telegram_webhook() again after restarting ngrok - just update
+    TELEGRAM_WEBHOOK_URL in .env and restart the app.
+    """
+    webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL", "")
+    if not webhook_url:
+        logger.warning("TELEGRAM_WEBHOOK_URL not set - skipping webhook registration")
+        return
+    success = set_telegram_webhook(webhook_url)
+    if not success:
+        logger.error("Telegram webhook registration failed on startup")
 
 
 @app.get("/")
