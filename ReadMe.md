@@ -30,7 +30,7 @@ cd pricepoa
 # 2. Set up environment variables
 cp .env.example .env
 
-# 3. Start all services (api, mongo, mongo-express)
+# 3. Start all services (api, mongo, mongo-express)`
 docker compose up
 
 # 4. Verify everything is running
