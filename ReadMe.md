@@ -66,11 +66,6 @@ Once `docker compose up` completes:
 | **Mongo Express** | http://localhost:8081 | MongoDB admin UI (dev only) |
 
 **MongoDB Direct Connection** (from host machine):
-```bash
-mongosh mongodb://pricepoa_dev:pricepoa_dev_password@localhost:27017/pricepoa
-```
-
----
 
 ## Project Structure
 
@@ -104,7 +99,7 @@ All configuration is managed via `.env` file (copy from `.env.example`).
 | `ENVIRONMENT` | `development` | dev, staging, production |
 | `MONGO_INITDB_ROOT_USERNAME` | `pricepoa_dev` | MongoDB admin user |
 | `MONGO_INITDB_ROOT_PASSWORD` | `pricepoa_dev_password` | MongoDB admin password |
-| `MONGODB_URI` | `mongodb://...@mongo:27017/pricepoa` | Connection string |
+| `MONGODB_URI` | `mongodb:// | Connection string |
 | `API_HOST` | `0.0.0.0` | API listen address |
 | `API_PORT` | `8000` | API port |
 | `API_RELOAD` | `true` | Hot reload on code changes |
@@ -162,8 +157,6 @@ Visit http://localhost:8081 and browse collections visually.
 
 **From CLI (mongosh):**
 ```bash
-mongosh mongodb://pricepoa_dev:pricepoa_dev_password@localhost:27017/pricepoa
-```
 
 ### Test the API
 
