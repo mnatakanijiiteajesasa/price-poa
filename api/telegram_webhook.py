@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
-from infographic.generator import (
+from infographics.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
 )
