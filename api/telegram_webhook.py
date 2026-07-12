@@ -9,10 +9,12 @@ import logging
 from typing import Optional
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
-from infographics.generator import (
+from infographic.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
 )
+from query_engine import query_single_product
+from database.connection import get_database
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -68,18 +70,24 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
             }
         }
     else:
-        # Single product
+        # Single product - real lookup against the prices collection.
+        # NOTE: treats the whole message as the product query text (e.g.
+        # "unga" or "cooking oil"). Free-text sentences like "what are
+        # prices for 2L cooking oil in Nyeri" won't match anything yet -
+        # extracting the product/town out of a full sentence is the NLP
+        # parser's job (still a Phase 2 TODO), not query_engine's.
+        db = await get_database()
+        result = await query_single_product(db, text)
+
+        if result is None:
+            return {
+                "type": "not_found",
+                "data": {"query_text": text},
+            }
+
         return {
             "type": "single_product",
-            "data": {
-                "product_name": "Tomatoes (1kg)",
-                "stores": [
-                    {"name": "Naivas", "price": "120 KES", "offer": False},
-                    {"name": "Quickmart", "price": "110 KES", "offer": True},
-                    {"name": "Chandarana", "price": "130 KES", "offer": False}
-                ],
-                "date": "2026-06-26"
-            }
+            "data": result,
         }
 
 
@@ -130,6 +138,15 @@ async def telegram_webhook(
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         fallback_text = "Sorry, I encountered an error processing your request. Please try again."
+        send_telegram_text(chat_id, fallback_text)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    if processed["type"] == "not_found":
+        query_text = processed["data"]["query_text"]
+        fallback_text = (
+            f'Sorry, I couldn\'t find "{query_text}" in our database yet. '
+            "Try the exact product name, e.g. \"Cooking Oil\" or \"unga\"."
+        )
         send_telegram_text(chat_id, fallback_text)
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
