@@ -3,4 +3,4 @@ motor
 uvicorn
 requests
 python-dotenv
-Pillow
+Pillow==10.4.0
