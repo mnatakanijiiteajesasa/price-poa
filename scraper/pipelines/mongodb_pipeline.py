@@ -37,7 +37,9 @@ class MongoDBPipeline:
             # Fix import to work when run from scraper context
             import sys
             import os
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'database'))
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', 'database')))
+            sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..', 'database')))
             from connection import get_database
             self.db = await get_database()
             logger.info(f"MongoDBPipeline connected to database for spider {spider.name}")

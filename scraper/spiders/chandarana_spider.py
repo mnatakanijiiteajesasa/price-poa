@@ -1,45 +1,30 @@
 """
-Scrapy spider for scraping prices from Chandarana Online.
+Scrapy spider for scraping prices from Chandarana Foodplus Online.
 """
 import scrapy
+from scrapy.http import Response
+from typing import Generator, Dict, Any, Optional
 import logging
-import re
-from ..base_spider import BasePricePoaSpider
-from ..middleware.playwright_middleware import PlaywrightMiddleware
+from base_spider import BasePricePoaSpider
+
+logger = logging.getLogger(__name__)
 
 
 class ChandaranaSpider(BasePricePoaSpider):
-    """
-    Spider for scraping Chandarana Online store.
-    """
-
+    """Spider for scraping Chandarana Foodplus Online store."""
+    
     name = 'chandarana_spider'
-    allowed_domains = ['chandarana.co.ke']
+    allowed_domains = ['foodplus.co.ke']
     start_urls = [
-        'https://www.chandarana.co.ke/',
-        'https://www.chandarana.co.ke/shop',
-        'https://www.chandarana.co.ke/supermarket',
+        'https://foodplus.co.ke/fresh-food.html',
     ]
 
     # Domains that require JavaScript rendering
-    js_domains = ['chandarana.co.ke']
+    js_domains = ['foodplus.co.ke']
 
     custom_settings = {
-        'DOWNLOAD_DELAY': 2,
-        'RANDOMIZE_DOWNLOAD_DELAY': True,
-        'CONCURRENT_REQUESTS': 8,
-        'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
         'RETRY_TIMES': 2,
         'USER_AGENT': 'PricePoa Scraper - Chandarana (+https://pricepoa.co.ke)',
-        # Enable our middlewares
-        'DOWNLOADER_MIDDLEWARES': {
-            'middleware.playwright_middleware.PlaywrightMiddleware': 543,
-            'middleware.deduplication_middleware.PriceDeduplicationMiddleware': 544,
-        },
-        'ITEM_PIPELINES': {
-            'pipelines.validation_pipeline.PriceValidationPipeline': 300,
-            'pipelines.mongodb_pipeline.MongoDBPipeline': 400,
-        },
     }
 
     def __init__(self, *args, **kwargs):
@@ -47,153 +32,144 @@ class ChandaranaSpider(BasePricePoaSpider):
         self.store_chain = "Chandarana"
         self.default_store_branch = "Online Store"
 
-    def parse(self, response):
-        """
-        Parse Chandarana homepage.
-        """
-        logging.info(f"Parsing Chandarana homepage: {response.url}")
+    def parse(self, response: Response) -> Generator[scrapy.Request, None, None]:
+        """Parse Chandarana homepage and extract category links."""
+        logger.info(f"Parsing Chandarana homepage: {response.url}")
 
-        # Extract category links
         category_links = response.css(
-            'a[href*="/shop/"], .category-link, .menu-item a[href*="/category/"]'
-        )::attr('href').getall()
+            'a[href*="/shop/"]::attr(href), .category-link::attr(href), .menu-item a[href*="/category/"]::attr(href)'
+        ).getall()
 
         for link in set(category_links):
             if link:
-                if not link.startswith('http'):
-                    link = response.urljoin(link)
-                yield scrapy.Request(
+                yield response.follow(
                     url=link,
                     callback=self.parse_category,
-                    meta={'use_playwright': True} if self._needs_js(link) else {}
+                    meta={'use_playwright': self._needs_js(link)}
                 )
 
-    def parse_category(self, response):
-        """
-        Parse category page.
-        """
-        logging.info(f"Parsing Chandarana category: {response.url}")
+    def parse_category(self, response: Response) -> Generator[scrapy.Request, None, None]:
+        """Parse category page and extract product links."""
+        logger.info(f"Parsing Chandarana category: {response.url}")
 
-        # Extract product links
         product_links = response.css(
-            '.product-item a, .product-link, a[href*="/item/"]'
-        )::attr('href').getall()
+            '.product-item a::attr(href), .product-link::attr(href), a[href*="/item/"]::attr(href)'
+        ).getall()
 
         for link in set(product_links):
             if link:
-                if not link.startswith('http'):
-                    link = response.urljoin(link)
-                yield scrapy.Request(
+                yield response.follow(
                     url=link,
                     callback=self.parse_product,
-                    meta={'use_playwright': True} if self._needs_js(link) else {}
+                    meta={'use_playwright': self._needs_js(link)}
                 )
 
         # Handle pagination
-        next_page = response.css('a[rel="next"], .next::attr(href)').get()
+        next_page = response.css(
+            'a[rel="next"]::attr(href), .next-page::attr(href), .pagination__next::attr(href)'
+        ).get()
         if next_page:
-            if not next_page.startswith('http'):
-                next_page = response.urljoin(next_page)
-            yield scrapy.Request(
+            yield response.follow(
                 url=next_page,
                 callback=self.parse_category,
-                meta={'use_playwright': True} if self._needs_js(next_page) else {}
+                meta={'use_playwright': self._needs_js(next_page)}
             )
 
-    def parse_product(self, response):
-        """
-        Parse individual product page.
-        """
-        logging.info(f"Parsing Chandarana product: {response.url}")
+    def parse_product(self, response: Response) -> Generator[Dict[str, Any], None, None]:
+        """Parse individual product page and extract details."""
+        logger.info(f"Parsing Chandarana product: {response.url}")
 
+        # 1. Try to parse from JSON-LD schema first (most reliable for Next.js/E-commerce apps)
         try:
-            # Extract product information
-            product_name = self._extract_text(response, [
+            for script in response.xpath('//script[@type="application/ld+json"]/text()').getall():
+                import json
+                try:
+                    data = json.loads(script)
+                    data_list = data if isinstance(data, list) else [data]
+                    for item in data_list:
+                        if item.get('@type') == 'Product':
+                            name = item.get('name')
+                            offers = item.get('offers', {})
+                            price = offers.get('price')
+                            if name and price:
+                                yield {
+                                    'product_name': name.strip(),
+                                    'store_chain': self.store_chain,
+                                    'store_branch': response.meta.get('store_branch', self.default_store_branch),
+                                    'price_kes': str(price),
+                                    'source': 'chandarana_online',
+                                    'is_promotional': False,
+                                    'promotion_details': None,
+                                    'response_url': response.url,
+                                    'category': response.meta.get('category', 'General')
+                                }
+                                return
+                except Exception as e:
+                    logger.debug(f"JSON-LD parsing block error: {e}")
+        except Exception as e:
+            logger.warning(f"Error checking JSON-LD: {e}")
+
+        # 2. Fallback to CSS selectors if JSON-LD was missing or failed
+        try:
+            product_name = self._extract_first(response, [
+                'h1 *::text',
                 'h1::text',
                 '.product-title::text',
                 '.product-name::text'
             ])
 
-            category = self._extract_text(response, [
+            category = self._extract_first(response, [
                 '.breadcrumb li:last-child a::text',
                 '.category-path::text'
-            ])
+            ]) or response.meta.get('category', 'General')
 
-            price_text = self._extract_text(response, [
+            price_text = self._extract_first(response, [
                 '.price::text',
                 '.current-price::text',
                 '[data-testid="price"]::text',
-                '.sale-price::text'
+                '.sale-price::text',
+                '[class*="price"]::text'
             ])
 
             if not product_name or not price_text:
-                logging.warning(f"Missing product name or price for {response.url}")
+                logger.warning(f"Missing product name or price for {response.url}")
                 return
 
-            # Parse price
-            price = self._parse_price(price_text)
-            if price is None:
-                logging.warning(f"Could not parse price: {price_text}")
-                return
-
-            # Check for promotions
-            is_promotional = bool(self._extract_text(response, [
+            # Check for promotional details
+            promo_selector = self._extract_first(response, [
                 '.badge-offer, .label-sale, .promo-badge',
                 '[data-testid="original-price"]',
                 '.was-price::text'
-            ]))
+            ])
+            is_promotional = bool(promo_selector)
 
             promotion_details = None
             if is_promotional:
-                promotion_details = self._extract_text(response, [
+                promotion_details = self._extract_first(response, [
                     '.offer-details::text',
                     '.promo-text::text',
                     '.badge-offer::text'
                 ])
 
-            # Create item
-            item = {
-                'product_name': product_name.strip(),
+            yield {
+                'product_name': product_name,
                 'store_chain': self.store_chain,
-                'store_branch': self.default_store_branch,
-                'price_kes': price,
+                'store_branch': response.meta.get('store_branch', self.default_store_branch),
+                'price_kes': price_text,
                 'source': 'chandarana_online',
                 'is_promotional': is_promotional,
                 'promotion_details': promotion_details,
-                'scraped_at': response.meta.get('download_latency', 0),
-                'response_url': response.url
+                'response_url': response.url,
+                'category': category
             }
 
-            # Add category if extracted
-            if category:
-                item['category'] = category.strip()
-
-            yield item
-
         except Exception as e:
-            logging.error(f"Error parsing Chandarana product {response.url}: {e}")
+            logger.error(f"Error parsing Chandarana product {response.url}: {e}", exc_info=True)
 
-    def _extract_text(self, response, selectors):
-        """Extract text using first matching selector."""
+    def _extract_first(self, response: Response, selectors: list) -> Optional[str]:
+        """Extract trimmed text from the first selector that yields a match."""
         for selector in selectors:
             text = response.css(selector).get()
             if text:
                 return text.strip()
         return None
-
-    def _parse_price(self, price_text):
-        """Parse price text into float."""
-        if not price_text:
-            return None
-        # Remove everything except digits and decimal point
-        cleaned = re.sub(r'[^\d\.]', '', price_text)
-        try:
-            return float(cleaned)
-        except ValueError:
-            return None
-
-    def _needs_js(self, url):
-        """Check if URL needs JavaScript rendering."""
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        return any(domain in parsed.netloc for domain in self.js_domains)

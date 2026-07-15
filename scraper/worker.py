@@ -13,6 +13,7 @@ import time
 
 # Add the current directory to Python path to enable imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'settings')
 
 # Now we can import from the scraper package
 from scheduler import scrape_scheduler, setup_default_schedules
@@ -27,6 +28,9 @@ logging.basicConfig(
         logging.FileHandler('scraping.log')
     ]
 )
+
+# Silence verbose PyMongo internal topology/connection debug heartbeats
+logging.getLogger('pymongo').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 

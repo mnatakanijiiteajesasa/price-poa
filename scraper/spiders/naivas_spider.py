@@ -1,286 +1,207 @@
 """
 Scrapy spider for scraping prices from Naivas Online.
-Implements product extraction and price data collection.
 """
 import scrapy
+from scrapy.http import Response
 from typing import Generator, Dict, Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 import re
 import logging
-from ..base_spider import BasePricePoaSpider
-from ..middleware.playwright_middleware import PlaywrightMiddleware
+from base_spider import BasePricePoaSpider
+
+logger = logging.getLogger(__name__)
 
 
 class NaivasSpider(BasePricePoaSpider):
-    """
-    Spider for scraping Naivas Online store (naivas.online).
-    Handles both regular HTML and JavaScript-rendered content.
-    """
-
+    """Spider for scraping Naivas Online store."""
+    
     name = 'naivas_spider'
     allowed_domains = ['naivas.online']
     start_urls = [
-        'https://naivas.online/',
-        # Add specific category URLs as needed
-        'https://naivas.online/supermarket',
-        'https://naivas.online/groceries',
-        'https://naivas.online/fresh-foods',
+        'https://naivas.online',
     ]
 
     # Domains that require JavaScript rendering
     js_domains = ['naivas.online']
 
     custom_settings = {
-        'DOWNLOAD_DELAY': 2,
-        'RANDOMIZE_DOWNLOAD_DELAY': True,
-        'CONCURRENT_REQUESTS': 8,
-        'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
         'RETRY_TIMES': 3,
         'USER_AGENT': 'PricePoa Scraper - Naivas (+https://pricepoa.co.ke)',
-        # Enable our middlewares
-        'DOWNLOADER_MIDDLEWARES': {
-            'middleware.playwright_middleware.PlaywrightMiddleware': 543,
-            'middleware.deduplication_middleware.PriceDeduplicationMiddleware': 544,
-        },
-        'ITEM_PIPELINES': {
-            'pipelines.validation_pipeline.PriceValidationPipeline': 300,
-            'pipelines.mongodb_pipeline.MongoDBPipeline': 400,
-        },
     }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.store_chain = "Naivas"
-        # In a real implementation, you might want to load specific store branches
-        # from configuration or database
         self.default_store_branch = "Online Store"
 
-    def parse(self, response: scrapy.Response) -> Generator[Dict[str, Any], None, None]:
-        """
-        Parse the main page and extract category links.
-        """
-        logger = logging.getLogger(__name__)
-        logger.info(f"Parsing Naivas main page: {response.url}")
+    def parse(self, response: Response) -> Generator[scrapy.Request, None, None]:
+        """Parse Naivas main page and extract category links."""
+        logger.info(f"Parsing Naivas homepage: {response.url}")
 
-        # Extract category links from navigation or homepage
         category_links = response.css(
-            'nav a[href*="/category"], .menu-item a[href*="/shop"], .category-link'
-        )::attr('href').getall()
+            'nav a[href*="/category"]::attr(href), .menu-item a[href*="/shop"]::attr(href), .category-link::attr(href)'
+        ).getall()
 
-        # Also look for category images or banners
         category_links += response.css(
-            '.category-banner a, .product-category a, [class*="category"] a'
-        )::attr('href').getall()
-
-        # If no specific category links found, try to infer from common patterns
-        if not category_links:
-            category_links = response.css('a[href*]').re(r'/category/[\w\-/]+')
+            '.category-banner a::attr(href), .product-category a::attr(href), [class*="category"] a::attr(href)'
+        ).getall()
 
         # Follow category links
-        for link in set(category_links):  # Remove duplicates
-            if link and not link.startswith('http'):
-                link = urljoin(response.url, link)
-            yield scrapy.Request(
-                url=link,
-                callback=self.parse_category,
-                meta={'use_playwright': True} if self._needs_js(link) else {}
-            )
+        for link in set(category_links):
+            if link:
+                yield response.follow(
+                    url=link,
+                    callback=self.parse_category,
+                    meta={'use_playwright': self._needs_js(link)}
+                )
 
-    def parse_category(self, response: scrapy.Response) -> Generator[Dict[str, Any], None, None]:
-        """
-        Parse a category page and extract product links.
-        """
-        logger = logging.getLogger(__name__)
+    def parse_category(self, response: Response) -> Generator[scrapy.Request, None, None]:
+        """Parse category page and extract product links."""
         logger.info(f"Parsing Naivas category page: {response.url}")
 
-        # Extract product links
         product_links = response.css(
-            '.product-item a, .product-link, [data-testid="product-link"]'
-        )::attr('href').getall()
+            '.product-item a::attr(href), .product-link::attr(href), [data-testid="product-link"]::attr(href)'
+        ).getall()
 
-        # Fallback selectors
         if not product_links:
             product_links = response.css(
-                '.product-card a, .item-link, a[href*="/product/"]'
-            )::attr('href').getall()
+                '.product-card a::attr(href), .item-link::attr(href), a[href*="/product/"]::attr(href)'
+            ).getall()
 
-        # Follow product links
         for link in set(product_links):
-            if link and not link.startswith('http'):
-                link = urljoin(response.url, link)
-            yield scrapy.Request(
-                url=link,
-                callback=self.parse_product,
-                meta={'use_playwright': True} if self._needs_js(link) else {}
-            )
+            if link:
+                yield response.follow(
+                    url=link,
+                    callback=self.parse_product,
+                    meta={'use_playwright': self._needs_js(link)}
+                )
 
         # Handle pagination
         next_page = response.css(
-            'a[rel="next"], .next-page, .pagination__next'
-        )::attr('href').get()
+            'a[rel="next"]::attr(href), .next-page::attr(href), .pagination__next::attr(href)'
+        ).get()
         if next_page:
-            if not next_page.startswith('http'):
-                next_page = urljoin(response.url, next_page)
-            yield scrapy.Request(
+            yield response.follow(
                 url=next_page,
                 callback=self.parse_category,
-                meta={'use_playwright': True} if self._needs_js(next_page) else {}
+                meta={'use_playwright': self._needs_js(next_page)}
             )
 
-    def parse_product(self, response: scrapy.Response) -> Generator[Dict[str, Any], None, None]:
-        """
-        Parse individual product page and extract price information.
-        """
-        logger = logging.getLogger(__name__)
-        logger.info(f"Parsing Naivas product page: {response.url}")
+    def parse_product(self, response: Response) -> Generator[Dict[str, Any], None, None]:
+        """Parse individual product page and extract details."""
+        logger.info(f"Parsing Naivas product: {response.url}")
 
+        # 1. Try to parse from JSON-LD schema first (most reliable for Next.js/E-commerce apps)
         try:
-            # Extract product information
-            product_name = self._extract_product_name(response)
-            category = self._extract_category(response)
-            price_text = self._extract_price(response)
-            is_promotional = self._is_promotional(response)
-            promotion_details = self._extract_promotion_details(response) if is_promotional else None
+            for script in response.xpath('//script[@type="application/ld+json"]/text()').getall():
+                import json
+                try:
+                    data = json.loads(script)
+                    data_list = data if isinstance(data, list) else [data]
+                    for item in data_list:
+                        if item.get('@type') == 'Product':
+                            name = item.get('name')
+                            offers = item.get('offers', {})
+                            price = offers.get('price')
+                            if name and price:
+                                yield {
+                                    'product_name': name.strip(),
+                                    'store_chain': self.store_chain,
+                                    'store_branch': response.meta.get('store_branch', self.default_store_branch),
+                                    'price_kes': str(price),
+                                    'source': 'naivas_online',
+                                    'is_promotional': False,
+                                    'promotion_details': None,
+                                    'response_url': response.url,
+                                    'category': response.meta.get('category', 'General')
+                                }
+                                return
+                except Exception as e:
+                    logger.debug(f"JSON-LD parsing block error: {e}")
+        except Exception as e:
+            logger.warning(f"Error checking JSON-LD: {e}")
 
-            if not product_name or price_text is None:
-                logger.warning(f"Could not extract product name or price from {response.url}")
+        # 2. Fallback to CSS selectors if JSON-LD was missing or failed
+        try:
+            product_name = self._extract_first(response, [
+                'h1 *::text',
+                'h1.product-title::text',
+                'h1[data-testid="product-title"]::text',
+                '.product-name::text',
+                'h1::text'
+            ])
+
+            category = self._extract_first(response, [
+                '[data-testid="product-category"]::text',
+                '.product-category::text',
+                '.breadcrumb a:last-child::text',
+                'nav ol li:last-child a::text'
+            ]) or response.meta.get('category', 'General')
+
+            price_text = self._extract_first(response, [
+                '[data-testid="price"]::text',
+                '.price-current::text',
+                '.price-sale::text',
+                '.price::text',
+                '.cost::text',
+                'span.price::text',
+                '[class*="price"]::text'
+            ])
+
+            if not product_name or not price_text:
+                logger.warning(f"Missing product name or price for {response.url}")
                 return
 
-            # Parse price
-            price = self._parse_price(price_text)
-            if price is None:
-                logger.warning(f"Could not parse price from text: {price_text}")
-                return
+            # Check for promotional details
+            is_promotional = False
+            promo_selector = self._extract_first(response, [
+                '.badge-sale, .label-offer, .promo-tag',
+                '[data-testid="price-original"]',
+                '.price-was, .original-price'
+            ])
+            if promo_selector:
+                is_promotional = True
 
-            # Generate item
-            item = {
-                'product_name': product_name.strip(),
-                'category': category.strip() if category else 'General',
+            # Was/Now pricing pattern verification
+            original_price = response.css('.price-was::text, .original-price::text').get()
+            current_price = response.css('.price-current::text, .price-sale::text').get()
+            if original_price and current_price:
+                try:
+                    orig = float(re.sub(r'[^\d.]', '', original_price))
+                    curr = float(re.sub(r'[^\d.]', '', current_price))
+                    if curr < orig:
+                        is_promotional = True
+                except ValueError:
+                    pass
+
+            promotion_details = None
+            if is_promotional:
+                promotion_details = self._extract_first(response, [
+                    '.promo-details::text',
+                    '.offer-text::text',
+                    '[data-testid="promotion-details"]::text',
+                    '.badge-sale::text, .label-offer::text'
+                ])
+
+            yield {
+                'product_name': product_name,
                 'store_chain': self.store_chain,
-                'store_branch': self.default_store_branch,
-                'price_kes': price,
+                'store_branch': response.meta.get('store_branch', self.default_store_branch),
+                'price_kes': price_text,
                 'source': 'naivas_online',
-                'is_promotional': bool(is_promotional),
+                'is_promotional': is_promotional,
                 'promotion_details': promotion_details,
-                'scraped_at': response.meta.get('download_latency', 0),
-                'response_url': response.url
+                'response_url': response.url,
+                'category': category
             }
 
-            # Process through base spider validation
-            # Note: In practice, the validation pipeline will handle most of this
-            yield item
-
         except Exception as e:
-            logger.error(f"Error parsing product page {response.url}: {e}")
+            logger.error(f"Error parsing Naivas product {response.url}: {e}", exc_info=True)
 
-    def _extract_product_name(self, response: scrapy.Response) -> Optional[str]:
-        """Extract product name from page."""
-        selectors = [
-            'h1.product-title::text',
-            'h1[data-testid="product-title"]::text',
-            '.product-name::text',
-            'h1::text'
-        ]
-
-        for selector in selectors:
-            text = response.css(selector).get()
-            if text and text.strip():
-                return text.strip()
-        return None
-
-    def _extract_category(self, response: scrapy.Response) -> Optional[str]:
-        """Extract product category from page."""
-        selectors = [
-            '[data-testid="product-category"]::text',
-            '.product-category::text',
-            '.breadcrumb a:last-child::text',
-            'nav ol li:last-child a::text'
-        ]
-
-        for selector in selectors:
-            text = response.css(selector).get()
-            if text and text.strip():
-                return text.strip()
-        return None
-
-    def _extract_price(self, response: scrapy.Response) -> Optional[str]:
-        """Extract price text from page."""
-        selectors = [
-            '[data-testid="price"]::text',
-            '.price-current::text',
-            '.price-sale::text',
-            '.price::text',
-            '.cost::text',
-            'span.price::text'
-        ]
-
+    def _extract_first(self, response: Response, selectors: list) -> Optional[str]:
+        """Extract trimmed text from the first selector that yields a match."""
         for selector in selectors:
             text = response.css(selector).get()
             if text:
                 return text.strip()
         return None
-
-    def _is_promotional(self, response: scrapy.Response) -> bool:
-        """Check if product is on promotion."""
-        promo_indicators = [
-            '.badge-sale, .label-offer, .promo-tag',
-            '[data-testid="price-original"]',  # Original price indicates sale
-            '.price-was, .original-price',
-            'text*=Sale, text*=Offer, text*=Discount'
-        ]
-
-        for indicator in promo_indicators:
-            if response.css(indicator):
-                return True
-
-        # Check for "Was/Know" pricing pattern
-        original_price = response.css('.price-was::text, .original-price::text').get()
-        current_price = response.css('.price-current::text, .price-sale::text').get()
-        if original_price and current_price:
-            try:
-                orig = float(re.sub(r'[^\d.]', '', original_price))
-                curr = float(re.sub(r'[^\d.]', '', current_price))
-                return curr < orig  # Current price less than original = sale
-            except ValueError:
-                pass
-
-        return False
-
-    def _extract_promotion_details(self, response: scrapy.Response) -> Optional[str]:
-        """Extract promotion details if available."""
-        selectors = [
-            '.promo-details::text',
-            '.offer-text::text',
-            '[data-testid="promotion-details"]::text',
-            '.badge-sale::text, .label-offer::text'
-        ]
-
-        for selector in selectors:
-            text = response.css(selector).get()
-            if text and text.strip():
-                return text.strip()
-        return None
-
-    def _parse_price(self, price_text: str) -> Optional[float]:
-        """Parse price text into float value."""
-        if not price_text:
-            return None
-
-        # Remove currency symbols and extra text
-        cleaned = re.sub(r'[^\d\.]', '', price_text)
-        try:
-            return float(cleaned)
-        except ValueError:
-            # Try to extract first number if multiple present
-            numbers = re.findall(r'\d+(?:\.\d+)?', price_text)
-            if numbers:
-                try:
-                    return float(numbers[0])
-                except ValueError:
-                    pass
-        return None
-
-    def _needs_js(self, url: str) -> bool:
-        """Determine if URL needs JavaScript rendering."""
-        parsed = urlparse(url)
-        return any(domain in parsed.netloc for domain in self.js_domains)

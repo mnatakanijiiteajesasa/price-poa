@@ -43,8 +43,8 @@ services:
   # FASTAPI BACKEND
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     container_name: pricepoa_api
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
@@ -69,6 +69,8 @@ services:
       - "8000:8000"
     volumes:
       - ./api:/app
+      - ./database:/app/database
+      - ./infographics:/app/infographics
       - /app/__pycache__
     networks:
       - pricepoa_network
@@ -102,6 +104,10 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    volumes:
+      - ./scraper:/app
+      - ./database:/app/database
+      - /app/__pycache__
     # Remove profiles to enable by default, or set ENABLE_SCRAPER=true in .env
     # profiles:
     #   - scraper

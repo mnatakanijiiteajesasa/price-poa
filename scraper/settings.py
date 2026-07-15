@@ -9,18 +9,19 @@ SPIDER_MODULES = ['spiders']
 NEWSPIDER_MODULE = 'spiders'
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+ROBOTSTXT_OBEY = False
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
-CONCURRENT_REQUESTS = 16
+CONCURRENT_REQUESTS = 1
 
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 1
+DOWNLOAD_DELAY = 45.0
+RANDOMIZE_DOWNLOAD_DELAY = True
+
 # The download delay setting will honor only one of:
-CONCURRENT_REQUESTS_PER_DOMAIN = 8
-CONCURRENT_REQUESTS_PER_IP = 8
+CONCURRENT_REQUESTS_PER_DOMAIN = 1
 
 # Disable cookies (enabled by default)
 COOKIES_ENABLED = False
@@ -38,14 +39,12 @@ DEFAULT_REQUEST_HEADERS = {
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 SPIDER_MIDDLEWARES = {
-    'middleware.deduplication_middleware.PriceDeduplicationMiddleware': 543,
 }
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-    'middleware.playwright_middleware.PlaywrightMiddleware': 543,
-    'middleware.deduplication_middleware.PriceDeduplicationMiddleware': 544,
+    'middleware.invisible_playwright_middleware.InvisiblePlaywrightMiddleware': 543,
 }
 
 # Enable or disable extensions
@@ -57,8 +56,8 @@ EXTENSIONS = {
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
-    'pipelines.validation_pipeline.PriceValidationPipeline': 300,
-    'pipelines.mongodb_pipeline.MongoDBPipeline': 400,
+    'pipelines.normalization_pipeline.NormalizationPipeline': 300,
+    'pipelines.validation_pipeline.PriceValidationPipeline': 400,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)

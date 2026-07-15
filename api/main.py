@@ -5,8 +5,8 @@ import sys
 from motor.motor_asyncio import AsyncIOMotorClient
 import logging
 
-# Add project root to sys.path
-sys.path.append('/home/mogaka/projects/Price-Poa')
+# Add project root to sys.path dynamically
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # ✓ NEW: Import Telegram webhook router
 from telegram_webhook import router as telegram_router
