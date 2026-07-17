@@ -1,2 +1,6 @@
 .env
 TESTING.md
+__pycache__/
+*.pyc
+*.log
+venv/
