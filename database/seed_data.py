@@ -1,16 +1,18 @@
 """
 Data seeding script for PricePoa database.
-Loads initial product and store data from JSON fixtures.
+Loads initial product and store data from JSON fixtures, and generates
+price data for every product x store combination.
 """
 import asyncio
 import json
 import os
+import random
 from typing import List, Dict, Any
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import logging
 
 from .connection import get_database
-from .models import Product, Store
+from .models import Product, Store, Price, PRICE_INDEXES
 
 logger = logging.getLogger(__name__)
 
@@ -127,16 +129,135 @@ async def load_stores_from_json(file_path: str) -> int:
         return 0
 
 
+# Illustrative base price (KES) for the first/typical size variant of each
+# product. Rough placeholders for MVP testing - NOT sourced market data.
+# Keyed on product["name"] exactly as it appears in products_seed.json.
+BASE_PRICES = {
+    "Maize Flour (Unga)": 220, "Granulated Sugar": 180, "Cooking Oil": 320,
+    "White Bread": 65, "Fresh Milk": 65, "Eggs": 360, "Rice": 320,
+    "Tea Leaves": 150, "Salt": 60, "Wheat Flour": 230, "Sorghum": 150,
+    "Millet": 180, "Brown Sugar": 190, "Honey": 450, "Jam": 220,
+    "Butter": 380, "Margarine": 210, "Ghee": 550, "Brown Bread": 70,
+    "Buns": 90, "Cookies": 150, "Yogurt": 120, "Cheese": 280, "Cream": 150,
+    "Coffee": 250, "Juice": 180, "Soft Drinks": 130, "Water": 60,
+    "Black Pepper": 120, "Curry Powder": 110, "Royco": 90, "Garlic": 60,
+    "Tomatoes": 90, "Beans": 150, "Tuna": 220, "Peas": 100, "Corn": 100,
+    "Bar Soap": 80, "Toothpaste": 180, "Shampoo": 350, "Sanitary Pads": 150,
+    "Diapers": 900, "Washing Powder": 250, "Dishwashing Liquid": 220,
+    "Matches": 10, "Candles": 100, "Trash Bags": 200, "Bucket": 350,
+}
+
+# Illustrative per-chain pricing tendency, applied as a multiplier on top
+# of BASE_PRICES, plus per-branch random noise below. Not sourced data -
+# just enough spread that bar charts aren't flat across stores.
+CHAIN_FACTOR = {
+    "Naivas": 1.00,
+    "Carrefour": 1.07,
+    "Quickmart": 0.96,
+    "Chandarana": 0.98,
+}
+
+OFFER_PROBABILITY = 0.12  # ~1 in 8 store/product combos is promotional
+
+
+def _compute_price(base: float, chain_name: str) -> tuple:
+    """Returns (price_kes, is_promotional) for one product/store combo."""
+    chain_mult = CHAIN_FACTOR.get(chain_name, 1.00)
+    noise = random.uniform(-0.05, 0.05)  # +/-5% per-branch variance
+    price = base * chain_mult * (1 + noise)
+
+    is_promotional = random.random() < OFFER_PROBABILITY
+    if is_promotional:
+        price *= random.uniform(0.80, 0.90)  # 10-20% off
+
+    return round(price, 2), is_promotional
+
+
+async def generate_prices() -> int:
+    """
+    Generate price documents for every product x store combination
+    currently in the database.
+
+    Prices are SYNTHETIC placeholders (illustrative KES base values with
+    randomised per-chain/per-branch variance) - just enough realism to
+    exercise the query engine and infographic pipeline end to end. Not
+    sourced market data; should be superseded by the Phase 1 scraper
+    (source="scraper") and later receipt OCR (source="receipt").
+
+    Returns:
+        Number of price documents inserted
+    """
+    db = await get_database()
+
+    products = await db.products.find().to_list(length=None)
+    stores = await db.stores.find().to_list(length=None)
+
+    if not products or not stores:
+        logger.warning("No products or stores found - seed those before generating prices")
+        return 0
+
+    valid_prices = []
+    skipped_products = set()
+
+    for product in products:
+        base = BASE_PRICES.get(product["name"])
+        if base is None:
+            skipped_products.add(product["name"])
+            continue
+
+        for store in stores:
+            price_kes, is_promotional = _compute_price(base, store["chain_name"])
+            try:
+                price = Price(
+                    product_id=str(product["_id"]),
+                    store_id=str(store["_id"]),
+                    price_kes=price_kes,
+                    source="seed",
+                    is_promotional=is_promotional,
+                    promotion_details="Special offer" if is_promotional else None,
+                )
+                valid_prices.append(price.dict())
+            except Exception as e:
+                logger.warning(f"Skipping invalid price data: {e}")
+                continue
+
+    if not valid_prices:
+        logger.warning("No valid prices generated")
+        return 0
+
+    collection = db.prices
+    # Clear existing prices (for clean seeding), same pattern as
+    # load_products_from_json / load_stores_from_json above.
+    await collection.delete_many({})
+    result = await collection.insert_many(valid_prices)
+
+    # Apply the same indexes defined for prices in models.py
+    for keys, options in PRICE_INDEXES:
+        await collection.create_index(keys, **options)
+
+    logger.info(
+        f"Generated {len(result.inserted_ids)} price documents across "
+        f"{len(products) - len(skipped_products)} products x {len(stores)} stores"
+    )
+    if skipped_products:
+        logger.warning(
+            f"Skipped {len(skipped_products)} products with no BASE_PRICES "
+            f"entry: {sorted(skipped_products)}"
+        )
+
+    return len(result.inserted_ids)
+
+
 async def seed_database(products_file: str = None, stores_file: str = None) -> Dict[str, int]:
     """
-    Seed the database with initial product and store data.
+    Seed the database with initial product, store, and price data.
 
     Args:
         products_file: Path to products JSON file (defaults to seeds/products_seed.json)
         stores_file: Path to stores JSON file (defaults to seeds/stores_seed.json)
 
     Returns:
-        Dictionary with counts of loaded products and stores
+        Dictionary with counts of loaded products, stores, and generated prices
     """
     if products_file is None:
         products_file = os.path.join(
@@ -156,11 +277,18 @@ async def seed_database(products_file: str = None, stores_file: str = None) -> D
     # Load stores
     store_count = await load_stores_from_json(stores_file)
 
-    logger.info(f"Database seeding complete. Loaded {product_count} products and {store_count} stores")
+    # Generate prices for every product x store combination
+    price_count = await generate_prices()
+
+    logger.info(
+        f"Database seeding complete. Loaded {product_count} products, "
+        f"{store_count} stores, generated {price_count} prices"
+    )
 
     return {
         "products": product_count,
-        "stores": store_count
+        "stores": store_count,
+        "prices": price_count,
     }
 
 
@@ -168,6 +296,11 @@ def create_sample_seeds():
     """
     Create sample seed JSON files for demonstration.
     In a real implementation, these would be populated with actual 200 SKUs.
+
+    NOTE: not called automatically from __main__ - running this would
+    overwrite your real seeds/products_seed.json and seeds/stores_seed.json
+    with the small 10/8-item samples below. Call it explicitly if you
+    actually want to regenerate the sample files from scratch.
     """
     seeds_dir = os.path.join(os.path.dirname(__file__), "seeds")
     os.makedirs(seeds_dir, exist_ok=True)
@@ -352,209 +485,7 @@ def create_sample_seeds():
         json.dump(sample_stores, f, indent=2)
     logger.info(f"Created sample stores seed file: {stores_file}")
 
-    # Create a script to generate more realistic data for 200 SKUs
-    generate_script = os.path.join(seeds_dir, "generate_skus.py")
-    with open(generate_script, 'w') as f:
-        f.write('''#!/usr/bin/env python3
-"""
-Script to generate 200 core SKUs for PricePoa seed data.
-Creates realistic product data for Nairobi and Nyeri markets.
-"""
-import json
-import random
-from typing import List, Dict
-
-# Product categories and typical items for Kenyan grocery stores
-CATEGORIES = {
-    "Grains and Cereals": ["Maize Flour (Unga)", "Wheat Flour", "Rice", "Millet", "Sorghum"],
-    "Sugars and Sweeteners": ["Granulated Sugar", "Brown Sugar", "Honey", "Jam"],
-    "Oils and Fats": ["Cooking Oil", "Coconut Oil", "Butter", "Margarine", "Ghee"],
-    "Bakery": ["White Bread", "Brown Bread", "Buns", "Muffins", "Cookies"],
-    "Dairy": ["Fresh Milk", "Yogurt", "Cheese", "Eggs", "Cream"],
-    "Beverages": ["Tea Leaves", "Coffee", "Juice", "Soft Drinks", "Water"],
-    "Spices and Seasonings": ["Salt", "Black Pepper", "Curry Powder", "Royco", "Garlic"],
-    "Canned Foods": ["Tomatoes", "Beans", "Tuna", "Peas", "Corn"],
-    "Personal Care": ["Soap", "Toothpaste", "Shampoo", "Sanitary Pads", "Diapers"],
-    "Household": ["Detergent", "Matches", "Candles", "Bags", "Buckets"]
-}
-
-BRANDS = {
-    "Grains and Cereals": ["Ajiko", "Grameen", "Mwea", "Kenblest"],
-    "Sugars and Sweeteners": ["Kabras", "Mumias", "West Kenya"],
-    "Oils and Fats": ["Bidco", "Kapa Oils", "BIDCO", "Kericho Gold"],
-    "Bakery": ["Sunrise", "Ace", "Mama Mboga", "Fresh Bake"],
-    "Dairy": ["Brookside", "Kenchic", "Tuzo", "Sameer"],
-    "Beverages": ["Ketepa", "Williamson", "Kereru", "Delmonte"],
-    "Spices and Seasonings": ["Bamboo", "MDH", "Everest", "Badshah"],
-    "Canned Foods": ["Alliance", "Pickles", "Tuna", "Blue Band"],
-    "Personal Care": ["Protex", "Colgate", "Pepsodent", "Always", "Pampers"],
-    "Household": ["OMO", "Surf", "Kims", "Harpic", "Glade"]
-}
-
-SWAHILI_ALIASES = {
-    "Maize Flour (Unga)": "unga",
-    "Wheat Flour": "unga wa ngano",
-    "Rice": "mchele",
-    "Millet": "mtama",
-    "Sorghum": "mtama",
-    "Granulated Sugar": "sukari",
-    "Brown Sugar": "sukari bluu",
-    "Honey": "asali",
-    "Jam": "jamu",
-    "Cooking Oil": "mifuta ya kupaka",
-    "Coconut Oil": "mifuta ya nazi",
-    "Butter": "boteri",
-    "Margarine": "margareen",
-    "Ghee": "samni",
-    "White Bread": "mkate",
-    "Brown Bread": "mkate bluu",
-    "Buns": "buns",
-    "Muffins": "mavuffin",
-    "Cookies": "biscuiti",
-    "Fresh Milk": "maziwa",
-    "Yogurt": "yogerti",
-    "Cheese": "jibini",
-    "Eggs": "mayai",
-    "Cream": "kribu",
-    "Tea Leaves": "chai",
-    "Coffee": "kahawa",
-    "Juice": "jasho",
-    "Soft Drinks": "soda",
-    "Water": "maji",
-    "Salt": "chumvi",
-    "Black Pepper": "pilipili manga",
-    "Curry Powder": "pavu ya karri",
-    "Royco": "royco",
-    "Garlic": "utunguu",
-    "Tomatoes": "nyanya",
-    "Beans": "maharagwe",
-    "Tuna": "tuna",
-    "Peas": " njegere",
-    "Corn": " mahindi",
-    "Soap": "sabuni",
-    "Toothpaste": "paste ya meno",
-    "Shampoo": "shampuu",
-    "Sanitary Pads": "mapambano",
-    "Diapers": "pampers",
-    "Detergent": "deterjent",
-    "Matches": "kichawi",
-    "Candles": "mishipa",
-    "Bags": " bendera",
-    "Buckets": " baaki"
-}
-
-SHENG_ALIASES = {
-    "Maize Flour (Unga)": "unga power",
-    "Wheat Flour": "flour",
-    "Rice": "mchele",
-    "Millet": "mtama",
-    "Sorghum": "mtama",
-    "Granulated Sugar": "sukari nguru",
-    "Brown Sugar": "sukari bluu",
-    "Honey": "asali",
-    "Jam": "jamu",
-    "Cooking Oil": "mother",
-    "Coconut Oil": "mother bluu",
-    "Butter": "butter",
-    "Margarine": "margarine",
-    "Ghee": "samni",
-    "White Bread": "mkate wa mzungu",
-    "Brown Bread": "mkate bluu",
-    "Buns": "buns",
-    "Muffins": "mavuffin",
-    "Cookies": "biscuiti",
-    "Fresh Milk": "maziwa kali",
-    "Yogurt": "yogurt",
-    "Cheese": "cheez",
-    "Eggs": "mayai",
-    "Cream": "cream",
-    "Tea Leaves": "chai",
-    "Coffee": "kahawa",
-    "Juice": "juice",
-    "Soft Drinks": "soda",
-    "Water": "maji",
-    "Salt": "chumbo",
-    "Black Pepper": "paprika",
-    "Curry Powder": "pavu",
-    "Royco": "royco",
-    "Garlic": "itunguu",
-    "Tomatoes": "tamatim",
-    "Beans": "maharagwe",
-    "Tuna": "tuna",
-    "Peas": "ngere",
-    "Corn": "mahindi",
-    "Soap": "sabuni",
-    "Toothpaste": "paste",
-    "Shampoo": "shampoo",
-    "Sanitary Pads": "pads",
-    "Diapers": "pampers",
-    "Detergent": "detergent",
-    "Matches": "matches",
-    "Candles": "candles",
-    "Bags": "bags",
-    "Buckets": "buckets"
-}
-
-def generate_product_id() -> str:
-    """Generate a simple product ID."""
-    return f"prod_{random.randint(1000, 9999)}"
-
-def generate_products(count: int = 200) -> List[Dict]:
-    """Generate specified number of product documents."""
-    products = []
-    used_names = set()
-
-    for i in range(count):
-        # Select random category
-        category = random.choice(list(CATEGORIES.keys()))
-        # Select random product from category
-        base_name = random.choice(CATEGORIES[category])
-
-        # Make name more specific if needed
-        if base_name in used_names and len(used_names) < len(CATEGORIES[category]) * 2:
-            variants = ["Premium", "Super", "Extra", "Fresh", "Pure", "Natural", "Select"]
-            variant = random.choice(variants)
-            name = f"{base_name} {variant}"
-        else:
-            name = base_name
-            used_names.add(name)
-
-        # Select brand
-        brand = random.choice(BRANDS.get(category, ["Generic"]))
-
-        # Generate sizes/variants
-        size_options = ["500g", "1kg", "2kg", "500ml", "1L", "2L", "5L", "100g", "250g"]
-        sizes_variants = random.sample(size_options, random.randint(1, 3))
-
-        # Get aliases
-        swahili_aliases = [SWAHILI_ALIASES.get(base_name, base_name.lower())]
-        sheng_aliases = [SHENG_ALIASES.get(base_name, base_name.lower())]
-
-        product = {
-            "name": name,
-            "category": category,
-            "brand": brand,
-            "sizes_variants": sizes_variants,
-            "swahili_aliases": swahili_aliases,
-            "sheng_aliases": sheng_aliases
-        }
-        products.append(product)
-
-    return products
 
 if __name__ == "__main__":
-    # Generate 200 products
-    products = generate_products(200)
-
-    # Save to JSON file
-    with open("products_seed.json", "w") as f:
-        json.dump(products, f, indent=2)
-
-    print(f"Generated {len(products)} products and saved to products_seed.json")
-''')
-    os.chmod(generate_script, 0o755)
-    logger.info(f"Created SKU generation script: {generate_script}")
-
-if __name__ == "__main__":
-    create_sample_seeds()
-    logger.info("Sample seed files created successfully")
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(seed_database())

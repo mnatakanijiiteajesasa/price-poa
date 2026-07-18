@@ -71,6 +71,7 @@ services:
       - ./api:/app
       - ./database:/app/database
       - ./infographics:/app/infographics
+      - ./database:/app/database  
       - /app/__pycache__
     networks:
       - pricepoa_network

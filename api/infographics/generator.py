@@ -25,14 +25,35 @@ LINE_HEIGHT = 4
 BAR_HEIGHT = 30
 BAR_GAP = 10
 
+# Fonts are installed into the image via the `fonts-dejavu-core` apt package
+# (see Dockerfile). These are the standard Debian/Ubuntu paths for it.
+# Regular is used for body text, Bold for titles/headers.
+FONT_PATHS = {
+    "regular": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "bold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+}
 
-def get_font(size):
-    """Load a truetype font, fall back to default."""
+_font_cache = {}
+
+
+def get_font(size, bold=False):
+    """
+    Load a truetype font, cached per (size, weight).
+    Falls back to PIL's bitmap default font only if DejaVu isn't found
+    (e.g. running outside the Docker image), so local testing doesn't crash.
+    """
+    key = (size, bold)
+    if key in _font_cache:
+        return _font_cache[key]
+
+    path = FONT_PATHS["bold"] if bold else FONT_PATHS["regular"]
     try:
-        # Adjust the path if a specific font file is available
-        return ImageFont.truetype("arial.ttf", size)
+        font = ImageFont.truetype(path, size)
     except IOError:
-        return ImageFont.load_default()
+        font = ImageFont.load_default()
+
+    _font_cache[key] = font
+    return font
 
 
 def draw_bar_chart(draw, x_start, y_start, bar_width, max_value, bars, labels, highlight_index=None):
@@ -81,11 +102,11 @@ def generate_single_product_image(data: dict) -> bytes:
 
     # PricePoa Branding (top left)
     draw.rectangle([PADDING, PADDING, PADDING + 100, PADDING + 40], fill=PRIMARY_COLOR)
-    draw.text((PADDING + 10, PADDING + 10), "PricePoa", fill=(255, 255, 255), font=get_font(FONT_SIZE_HEADER))
+    draw.text((PADDING + 10, PADDING + 10), "PricePoa", fill=(255, 255, 255), font=get_font(FONT_SIZE_HEADER, bold=True))
 
     # Product Name
     product_name = data.get("product_name", "Unknown Product")
-    draw.text((PADDING + 120, PADDING + 15), product_name, fill=TEXT_COLOR, font=get_font(FONT_SIZE_TITLE))
+    draw.text((PADDING + 120, PADDING + 15), product_name, fill=TEXT_COLOR, font=get_font(FONT_SIZE_TITLE, bold=True))
     y_current = PADDING + 60
 
     # Date
@@ -121,7 +142,7 @@ def generate_single_product_image(data: dict) -> bytes:
 
         # Draw section header
         draw.text((PADDING, y_current), "Price Comparison:", fill=TEXT_COLOR,
-                  font=get_font(FONT_SIZE_HEADER))
+                  font=get_font(FONT_SIZE_HEADER, bold=True))
         y_current += FONT_SIZE_HEADER + PADDING // 4
 
         # Draw bar chart (max width for bars: IMG_WIDTH - 2*PADDING - 200 (for labels and values))
@@ -134,7 +155,7 @@ def generate_single_product_image(data: dict) -> bytes:
         for i, store in enumerate(stores):
             if store.get("offer", False):
                 draw.text((PADDING, y_current + i * (BAR_HEIGHT + BAR_GAP)),
-                          f"🔥 {store['name']}: Special Offer!", fill=RED_COLOR,
+                          f"\U0001F525 {store['name']}: Special Offer!", fill=RED_COLOR,
                           font=get_font(FONT_SIZE_SMALL))
 
     # Footer
@@ -161,11 +182,11 @@ def generate_shopping_list_image(data: dict) -> bytes:
 
     # PricePoa Branding (top left)
     draw.rectangle([PADDING, PADDING, PADDING + 100, PADDING + 40], fill=PRIMARY_COLOR)
-    draw.text((PADDING + 10, PADDING + 10), "PricePoa", fill=(255, 255, 255), font=get_font(FONT_SIZE_HEADER))
+    draw.text((PADDING + 10, PADDING + 10), "PricePoa", fill=(255, 255, 255), font=get_font(FONT_SIZE_HEADER, bold=True))
 
     # Title
     title = "Shopping List Comparison"
-    draw.text((PADDING + 120, PADDING + 15), title, fill=TEXT_COLOR, font=get_font(FONT_SIZE_TITLE))
+    draw.text((PADDING + 120, PADDING + 15), title, fill=TEXT_COLOR, font=get_font(FONT_SIZE_TITLE, bold=True))
     y_current = PADDING + 60
 
     # Date
@@ -197,7 +218,7 @@ def generate_shopping_list_image(data: dict) -> bytes:
 
         # Draw section header
         draw.text((PADDING, y_current), "Store Total Comparison:", fill=TEXT_COLOR,
-                  font=get_font(FONT_SIZE_HEADER))
+                  font=get_font(FONT_SIZE_HEADER, bold=True))
         y_current += FONT_SIZE_HEADER + PADDING // 4
 
         # Draw bar chart
@@ -210,13 +231,13 @@ def generate_shopping_list_image(data: dict) -> bytes:
         recommendation = data.get("recommendation", "")
         if recommendation:
             draw.text((PADDING, y_current), f"Recommendation: {recommendation}", fill=GREEN_COLOR,
-                      font=get_font(FONT_SIZE_BODY))
+                      font=get_font(FONT_SIZE_BODY, bold=True))
             y_current += FONT_SIZE_BODY + PADDING // 4
 
         savings = data.get("savings", "")
         if savings:
             draw.text((PADDING, y_current), f"Savings: {savings}", fill=GREEN_COLOR,
-                      font=get_font(FONT_SIZE_BODY))
+                      font=get_font(FONT_SIZE_BODY, bold=True))
             y_current += FONT_SIZE_BODY + PADDING // 4
 
     # Footer

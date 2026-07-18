@@ -5,3 +5,7 @@ __pycache__/
 *.log
 venv/
 *.core
+.log
+__pycache__/*
+venv/
+.pyc
