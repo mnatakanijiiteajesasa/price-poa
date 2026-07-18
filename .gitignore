@@ -1,5 +1,10 @@
 .env
 TESTING.md
+__pycache__/
+*.pyc
+*.log
+venv/
+*.core
 .log
 __pycache__/*
 venv/

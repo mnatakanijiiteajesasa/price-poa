@@ -4,3 +4,5 @@ playwright
 motor
 apscheduler
 pydantic
+python-dotenv
+git+https://github.com/feder-cr/invisible_playwright.git

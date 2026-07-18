@@ -7,6 +7,27 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure
 import logging
 
+# Load environment variables from .env file if available (useful for local development runs)
+try:
+    from dotenv import load_dotenv
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Try local root folder
+    dotenv_path = os.path.abspath(os.path.join(current_dir, '..', '.env'))
+    if os.path.exists(dotenv_path):
+        load_dotenv(dotenv_path)
+    else:
+        # Try one folder further up in case of sub-component execution
+        dotenv_path = os.path.abspath(os.path.join(current_dir, '..', '..', '.env'))
+        if os.path.exists(dotenv_path):
+            load_dotenv(dotenv_path)
+        else:
+            load_dotenv()
+except ImportError:
+    pass
+
+# Silence verbose PyMongo internal topology/connection debug heartbeats
+logging.getLogger('pymongo').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 class DatabaseConnection:

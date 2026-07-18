@@ -38,7 +38,9 @@ def send_telegram_text(chat_id: int, text: str) -> bool:
         "text": text,
     }
     try:
+        # Sends POST request to Telegram API
         resp = requests.post(url, json=payload, timeout=10)
+        # Raises an HTTPError if the HTTP request returned an unsuccessful status code
         resp.raise_for_status()
         return True
     except requests.RequestException as e:
