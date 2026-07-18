@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code and shared folders
 COPY api/ .
 COPY database/ ./database
-COPY infographics/ ./infographics
+
 
 # Expose the port the app runs on
 EXPOSE 8000

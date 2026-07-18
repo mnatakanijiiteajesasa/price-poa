@@ -25,13 +25,9 @@ router = APIRouter()
 async def process_telegram_message(chat_id: int, text: str) -> dict:
     """
     Process an incoming Telegram message and return structured data for infographic.
-    This is where your NLP parser will go (Phase 2).
+    This is where the NLP parser will go (Phase 2).
     """
     logger.info(f"Processing message from {chat_id}: {text}")
-
-    # TODO: Phase 2 - Implement NLP intent classification and entity extraction
-    # TODO: Phase 2 - Query the database for prices
-    # TODO: Phase 2 - Format the response data
 
     # Simple heuristic for now
     text_lower = text.lower()
