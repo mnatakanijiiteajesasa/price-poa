@@ -35,16 +35,21 @@ class NaivasSpider(BasePricePoaSpider):
         self.default_store_branch = "Online Store"
 
     def parse(self, response: Response) -> Generator[scrapy.Request, None, None]:
-        """Parse Naivas main page and extract category links."""
+        """Parse Naivas main page and extract category links.
+
+        Verified 2026-07-19 via inspect_selectors.py: the category flyout
+        renders into #mega-menu-full on every page load — it's CSS-hidden
+        (off-canvas, translate-x-full) until the "categories" button is
+        clicked, but the 72 links are already present in the DOM, so no
+        click/JS-interaction is needed. Old selectors (nav a[href*="/category"]
+        etc.) never matched anything on this platform.
+        """
         logger.info(f"Parsing Naivas homepage: {response.url}")
 
-        category_links = response.css(
-            'nav a[href*="/category"]::attr(href), .menu-item a[href*="/shop"]::attr(href), .category-link::attr(href)'
-        ).getall()
+        category_links = response.css('#mega-menu-full a::attr(href)').getall()
 
-        category_links += response.css(
-            '.category-banner a::attr(href), .product-category a::attr(href), [class*="category"] a::attr(href)'
-        ).getall()
+        if not category_links:
+            logger.warning(f"Zero category links extracted from {response.url}")
 
         # Follow category links
         for link in set(category_links):
@@ -59,14 +64,15 @@ class NaivasSpider(BasePricePoaSpider):
         """Parse category page and extract product links."""
         logger.info(f"Parsing Naivas category page: {response.url}")
 
-        product_links = response.css(
-            '.product-item a::attr(href), .product-link::attr(href), [data-testid="product-link"]::attr(href)'
-        ).getall()
+        # Verified 2026-07-19 via inspect_selectors.py against /dairy: every
+        # product's image sits inside a div.product-img, which is a real
+        # semantic class (not a Tailwind utility), so it's the stable anchor
+        # to select on. Old selectors (.product-item, .product-card, etc.)
+        # never matched anything on this platform.
+        product_links = response.css('.product-img a::attr(href)').getall()
 
         if not product_links:
-            product_links = response.css(
-                '.product-card a::attr(href), .item-link::attr(href), a[href*="/product/"]::attr(href)'
-            ).getall()
+            logger.warning(f"Zero product links extracted from {response.url}")
 
         for link in set(product_links):
             if link:

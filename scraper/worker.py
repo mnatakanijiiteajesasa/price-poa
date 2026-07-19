@@ -34,6 +34,18 @@ logging.getLogger('pymongo').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+# Single source of truth for available spiders. Referenced by run_once_mode,
+# run_test_mode, and the --spider argparse choices below, so adding a new
+# spider only means updating this one list.
+SPIDER_NAMES = [
+    'naivas_spider',
+    'carrefour_spider',
+    'quickmart_spider',
+    'chandarana_spider',
+    # Add more spiders as they are created
+]
+
+
 def run_scheduled_mode():
     """Run the scraper in scheduled mode using APScheduler."""
     logger.info("Starting PricePoa scraper in scheduled mode")
@@ -51,9 +63,13 @@ def run_scheduled_mode():
         scrape_scheduler.shutdown(wait=True)
         logger.info("Shutdown complete.")
 
-def run_once_mode():
-    """Run all spiders once immediately."""
-    logger.info("Running all spiders once")
+
+def run_once_mode(spider_name: Optional[str] = None):
+    """Run spiders once immediately.
+
+    If spider_name is given, only that spider is scheduled. Otherwise every
+    spider in SPIDER_NAMES runs.
+    """
     # Import here to avoid circular imports
     from scrapy.crawler import CrawlerProcess
     from scrapy.utils.project import get_project_settings
@@ -63,28 +79,28 @@ def run_once_mode():
 
     process = CrawlerProcess(settings)
 
-    # List of spider names to run
-    spider_names = [
-        'naivas_spider',
-        'carrefour_spider',
-        'quickmart_spider',
-        'chandarana_spider'
-        # Add more spiders as they are created
-    ]
+    if spider_name:
+        spiders_to_run = [spider_name]
+        logger.info(f"Running single spider: {spider_name}")
+    else:
+        spiders_to_run = SPIDER_NAMES
+        logger.info("Running all spiders")
 
-    for spider_name in spider_names:
-        logger.info(f"Scheduling spider: {spider_name}")
-        process.crawl(spider_name)
+    for name in spiders_to_run:
+        logger.info(f"Scheduling spider: {name}")
+        process.crawl(name)
 
     logger.info("Starting crawl process...")
     process.start()  # blocks until all crawling is finished
     logger.info("All spiders completed.")
 
-def run_test_mode():
-    """Run a single spider for testing."""
-    logger.info("Running test spider")
-    # For now, run naivas spider once
-    run_once_mode()  # Could be modified to run only one spider
+
+def run_test_mode(spider_name: Optional[str] = None):
+    """Run a single spider for testing. Defaults to naivas_spider if none given."""
+    target = spider_name or 'naivas_spider'
+    logger.info(f"Running test spider: {target}")
+    run_once_mode(target)
+
 
 def main():
     parser = argparse.ArgumentParser(description='PricePoa Scraper Worker')
@@ -94,17 +110,29 @@ def main():
         default='scheduled',
         help='Operation mode: scheduled (default), once, or test'
     )
+    parser.add_argument(
+        '--spider',
+        choices=SPIDER_NAMES,
+        default=None,
+        help=(
+            'Limit --mode once/test to a single spider. '
+            'Omit to run all spiders. Ignored in scheduled mode.'
+        )
+    )
     args = parser.parse_args()
 
     if args.mode == 'scheduled':
+        if args.spider:
+            logger.warning("--spider is ignored in scheduled mode; all schedules run as configured.")
         run_scheduled_mode()
     elif args.mode == 'once':
-        run_once_mode()
+        run_once_mode(args.spider)
     elif args.mode == 'test':
-        run_test_mode()
+        run_test_mode(args.spider)
     else:
         logger.error(f"Unknown mode: {args.mode}")
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
