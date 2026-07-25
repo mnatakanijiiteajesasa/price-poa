@@ -4,3 +4,6 @@ pymongo
 scikit-learn
 numpy
 pandas
+scipy
+fuzzywuzzy
+python-Levenshtein
