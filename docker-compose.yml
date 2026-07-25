@@ -64,12 +64,12 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
-      
+
     ports:
       - "8000:8000"
     volumes:
       - ./api:/app
-      - ./database:/app/database 
+      - ./database:/app/database
       - /app/__pycache__
     networks:
       - pricepoa_network
@@ -110,6 +110,30 @@ services:
     # Remove profiles to enable by default, or set ENABLE_SCRAPER=true in .env
     # profiles:
     #   - scraper
+
+  # INTELLIGENCE SERVICE
+  intelligence:
+    build:
+      context: .
+      dockerfile: intelligence/Dockerfile
+    container_name: pricepoa_intelligence
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+      MONGODB_URI: ${MONGO_URI}
+      MONGODB_DB: ${MONGODB_DB}
+      INTELLIGENCE_LOG_LEVEL: ${INTELLIGENCE_LOG_LEVEL:-info}
+    networks:
+      - pricepoa_network
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./intelligence:/app
+      - ./database:/app/database
+      - /app/__pycache__
+    # Run as a background service - in production this would be triggered by scrapers
+    # For now, we'll run the demo to show it works
+    command: python -m intelligence.demo
 
 networks:
   pricepoa_network:
