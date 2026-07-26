@@ -139,7 +139,7 @@ async def telegram_webhook(
         processed = await process_telegram_message(chat_id, text)
     except Exception as e:
         logger.error(f"Error processing message: {e}")
-        fallback_text = "Sorry, I encountered an error processing your request. Please try again."
+        fallback_text = "Sorry, our service is temporarily unavailable. Please try again later."
         send_telegram_text(chat_id, fallback_text)
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
