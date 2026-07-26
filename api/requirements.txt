@@ -4,3 +4,14 @@ uvicorn
 requests
 python-dotenv
 Pillow==10.4.0
+
+#INTELLIGENCE REQUIREMENTS
+motor
+apscheduler
+pymongo
+scikit-learn
+numpy
+pandas
+scipy
+fuzzywuzzy
+python-Levenshtein

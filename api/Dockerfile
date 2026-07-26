@@ -14,13 +14,15 @@ RUN apt-get update \
 
 # Copy the requirements file and install dependencies
 COPY api/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --default-timeout=250 --retries 10 -r requirements.txt
 
 # Copy the application code and shared folders
 COPY api/ .
 COPY database/ ./database
 COPY intelligence/ ./intelligence
 
+ENV PYTHONPATH=/app:/app/intelligence
 
 # Expose the port the app runs on
 EXPOSE 8000

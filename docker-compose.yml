@@ -132,9 +132,6 @@ services:
       - ./intelligence:/app
       - ./database:/app/database
       - /app/__pycache__
-    # Run as a background service - in production this would be triggered by scrapers
-    # For now, we'll run the demo to show it works
-    # command: python -m intelligence.demo
 
 networks:
   pricepoa_network:
