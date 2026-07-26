@@ -14,8 +14,9 @@ from infographics.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
 )
-from query_engine import query_single_product, find_product
+from query_engine import get_product_prices, find_product
 from database.connection import get_database
+from intelligence.nlp.product_matcher import find_product_enhanced
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -67,14 +68,18 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
             }
         }
     else:
-        # Single product - real lookup against the prices collection.
-        # NOTE: treats the whole message as the product query text (e.g.
-        # "unga" or "cooking oil"). Free-text sentences like "what are
-        # prices for 2L cooking oil in Nyeri" won't match anything yet -
-        # extracting the product/town out of a full sentence is the NLP
-        # parser's job (still a Phase 2 TODO), not query_engine's.
+        # Single product - use enhanced matching (exact + fuzzy + aliases) to find product.
+        # NOTE: This replaces the old exact-only lookup with NLP-powered matching.
         db = await get_database()
-        result = await query_single_product(db, text)
+        product = await find_product_enhanced(db, text)
+        if product is None:
+            return {
+                "type": "not_found",
+                "data": {"query_text": text},
+            }
+
+        # Get product prices (same as before)
+        result = await get_product_prices(db, product)
 
         if result is None:
             return {
@@ -148,9 +153,8 @@ async def telegram_webhook(
             "products": [],  # will fill if we have product IDs
         }
         if processed.get("type") == "single_product":
-            # Try to get product ID from the processed data? Not present.
-            # Instead, we can look up product by text again.
-            product = await find_product(db, text)
+            # Look up the product by text again for logging (we already did this in processing, but we need the object for logging)
+            product = await find_product_enhanced(db, text)
             if product:
                 query_log["products"] = [str(product["_id"])]
         # For other types, leave products empty
