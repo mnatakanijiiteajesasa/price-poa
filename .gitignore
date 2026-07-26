@@ -9,4 +9,4 @@ venv/
 __pycache__/*
 venv/
 .pyc
-INTELLIGENCE_LAYER_DETAILS.MD
+INTELLIGENCE_LAYER_DETAILS.md

@@ -1,34 +1,30 @@
-# Intelligence Service Dockerfile
 FROM python:3.12-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
+COPY intelligence/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the intelligence module
-COPY . .
+COPY intelligence/ .
+COPY database/ ./database
 
-# Create necessary directories
+#create directories for models and logs
 RUN mkdir -p /app/models /app/logs
 
-# Set environment variables
+# set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose port (though this service will be called internally, not exposed externally)
+#expose port (EXPOSED INTERNALLY)
 EXPOSE 8000
 
 # Copy entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
+COPY intelligence/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Entry point
+# Entrypoint
 ENTRYPOINT ["docker-entrypoint.sh"]
