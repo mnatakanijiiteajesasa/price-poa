@@ -81,7 +81,8 @@ class IntelligenceEngine:
                 logger.info("Product recommendation model initialized successfully")
             else:
                 logger.warning("Failed to initialize product recommendation model")
-            await logger.error(f"Error initializing product recommendations: {e}")
+        except Exception as e:
+            logger.error(f"Error initializing product recommendations: {e}")
             results['product_recommendations'] = False
 
         # Price correlation tracker is ready to use (computes on demand)
