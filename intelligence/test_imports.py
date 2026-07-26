@@ -13,19 +13,19 @@ def test_imports():
         print("✓ Main intelligence engine imported successfully")
 
         # Test anomaly detection
-        from intelligence.anomaly_detection.isolation_forest_detector import PriceAnomalyDetector
+        from anomaly_detection.isolation_forest_detector import PriceAnomalyDetector
         print("✓ Anomaly detection module imported successfully")
 
         # Test product recommendations
-        from intelligence.product_recommendations.cosine_similarity_recommender import ProductRecommender
+        from product_recommendations.cosine_similarity_recommender import ProductRecommender
         print("✓ Product recommendations module imported successfully")
 
         # Test price correlation
-        from intelligence.price_correlation.pearson_correlation_tracker import PriceCorrelationTracker
+        from price_correlation.pearson_correlation_tracker import PriceCorrelationTracker
         print("✓ Price correlation module imported successfully")
 
         # Test query trends
-        from intelligence.query_trends.aggregation_pipeline import QueryTrendAggregator
+        from query_trends.aggregation_pipeline import QueryTrendAggregator
         print("✓ Query trends module imported successfully")
 
         # Test convenience functions
@@ -51,10 +51,10 @@ def test_basic_functionality():
     print("\nTesting basic object initialization...")
 
     try:
-        from intelligence.anomaly_detection.isolation_forest_detector import PriceAnomalyDetector
-        from intelligence.product_recommendations.cosine_similarity_recommender import ProductRecommender
-        from intelligence.price_correlation.pearson_correlation_tracker import PriceCorrelationTracker
-        from intelligence.query_trends.aggregation_pipeline import QueryTrendAggregator
+        from anomaly_detection.isolation_forest_detector import PriceAnomalyDetector
+        from product_recommendations.cosine_similarity_recommender import ProductRecommender
+        from price_correlation.pearson_correlation_tracker import PriceCorrelationTracker
+        from query_trends.aggregation_pipeline import QueryTrendAggregator
 
         # Test creating instances
         anomaly_detector = PriceAnomalyDetector()
