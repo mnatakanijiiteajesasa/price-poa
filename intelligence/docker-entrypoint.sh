@@ -32,7 +32,9 @@ echo "MongoDB is up and running!"
 
 # Run initialization
 echo "Initializing intelligence models..."
-python -c "
+PYTHONPATH=/app python -c "
+import sys
+print('Python path:', sys.path)
 import asyncio
 import logging
 from intelligence import initialize_intelligence
@@ -58,7 +60,9 @@ echo "Starting intelligence background worker..."
 
 # This would normally run periodic tasks like model retraining, correlation updates, etc.
 # For now, we'll run a simple loop that does periodic maintenance
-python -c "
+PYTHONPATH=/app python -c "
+import sys
+print('Background worker Python path:', sys.path)
 import asyncio
 import logging
 import time
