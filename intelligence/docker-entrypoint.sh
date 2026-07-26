@@ -34,6 +34,7 @@ echo "MongoDB is up and running!"
 echo "Initializing intelligence models..."
 PYTHONPATH=/app python -c "
 import sys
+sys.path.insert(0, '/app')
 print('Python path:', sys.path)
 import asyncio
 import logging
@@ -62,6 +63,7 @@ echo "Starting intelligence background worker..."
 # For now, we'll run a simple loop that does periodic maintenance
 PYTHONPATH=/app python -c "
 import sys
+sys.path.insert(0, '/app')
 print('Background worker Python path:', sys.path)
 import asyncio
 import logging
