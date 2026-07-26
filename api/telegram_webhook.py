@@ -6,7 +6,7 @@ FastAPI webhook endpoint for the Telegram Bot API - receives messages, sends rep
 from fastapi import APIRouter, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
@@ -14,7 +14,7 @@ from infographics.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
 )
-from query_engine import get_product_prices, find_product
+from query_engine import get_product_prices, find_product, query_single_product
 from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_enhanced
 
@@ -22,6 +22,280 @@ logger = logging.getLogger("uvicorn.error")
 
 # Create router
 router = APIRouter()
+
+
+def extract_product_names_from_shopping_list(text: str) -> List[str]:
+    """
+    Extract potential product names from a shopping list query.
+
+    Args:
+        text: The user's message text
+
+    Returns:
+        List of potential product names to look up
+    """
+    # Convert to lowercase for processing
+    text_lower = text.lower().strip()
+
+    # Remove common shopping-related phrases
+    shopping_indicators = [
+        "i want to buy", "i need to buy", "can you show me prices for",
+        "shopping list:", "buy", "get", "need", "want", "show me prices for",
+        "what is the price of", "what are the prices of", "prices for",
+        " cost", " costs", "price", "prices"
+    ]
+
+    for indicator in shopping_indicators:
+        text_lower = text_lower.replace(indicator, "")
+
+    # Split by common delimiters
+    # First replace common conjunctions and punctuation with spaces
+    for delim in [",", "&", "and", "plus", "+"]:
+        text_lower = text_lower.replace(delim, " | ")
+
+    # Split by the pipe delimiter we introduced
+    parts = [part.strip() for part in text_lower.split("|") if part.strip()]
+
+    # Further split by spaces and filter out empty strings and common words
+    words = []
+    common_words = {"a", "an", "the", "of", "for", "in", "on", "at", "to", "from",
+                   "kg", "g", "gms", "ml", "l", "ltr", "liter", "liter", "piece",
+                   "pieces", "pc", "pcs", "bottle", "bottles", "packet", "packets",
+                   "pack", "packs", "can", "cans", "jar", "jars", "tin", "tins",
+                   "bag", "bags", "pouch", "pouches", "box", "boxes"}
+
+    for part in parts:
+        # Split by spaces and take meaningful words
+        subparts = part.split()
+        for word in subparts:
+            # Remove any trailing/leading punctuation
+            word = word.strip(".,!?;:")
+            if word and word not in common_words and len(word) > 1:
+                words.append(word)
+
+    # Also try to keep multi-word combinations (like "maize flour")
+    # by looking at 2-3 word combinations
+    multi_word_candidates = []
+    words_with_pos = text_lower.split()
+    for i in range(len(words_with_pos)):
+        # 2-word combinations
+        if i < len(words_with_pos) - 1:
+            two_word = f"{words_with_pos[i]} {words_with_pos[i+1]}"
+            two_word = two_word.strip(".,!?;:")
+            if len(two_word) > 3:  # Avoid very short combinations
+                multi_word_candidates.append(two_word)
+        # 3-word combinations
+        if i < len(words_with_pos) - 2:
+            three_word = f"{words_with_pos[i]} {words_with_pos[i+1]} {words_with_pos[i+2]}"
+            three_word = three_word.strip(".,!?;:")
+            if len(three_word) > 3:
+                multi_word_candidates.append(three_word)
+
+    # Combine single words and multi-word candidates, removing duplicates
+    all_candidates = list(set(words + multi_word_candidates))
+
+    # Filter out anything that looks like a quantity or unit
+    filtered_candidates = []
+    quantity_indicators = {"kg", "g", "mg", "ml", "l", "litre", "liter",
+                          "piece", "pieces", "pc", "pcs", "bottle", "bottles",
+                          "packet", "packets", "pack", "packs", "can", "cans",
+                          "jar", "jars", "tin", "tins", "bag", "bags",
+                          "pouch", "pouches", "box", "boxes", "dozen"}
+
+    for candidate in all_candidates:
+        # Skip if it's just a number or number + unit
+        if any(candidate.startswith(q) or candidate.endswith(q) for q in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]):
+            # Check if it's just a number or number followed by a unit
+            import re
+            if re.match(r'^\d+\s*(kg|g|mg|ml|l|litre|liter|pcs?|bottles?|packets?|packs?|cans?|jars?|tins?|bags?|pouches?|boxes?|dozen)?$', candidate):
+                continue
+        filtered_candidates.append(candidate)
+
+    return filtered_candidates
+
+
+async def get_products_for_shopping_list(db, product_names: List[str]) -> List[Dict[str, Any]]:
+    """
+    Look up products by name for a shopping list.
+
+    Args:
+        db: Database connection
+        product_names: List of product names to look up
+
+    Returns:
+        List of product dictionaries that were found
+    """
+    products = []
+    found_names = set()  # To avoid duplicates
+
+    for name in product_names:
+        if not name or len(name.strip()) < 2:
+            continue
+
+        # Try to find the product using enhanced matching
+        product = await find_product_enhanced(db, name.strip())
+        if product and str(product["_id"]) not in found_names:
+            products.append(product)
+            found_names.add(str(product["_id"]))
+        else:
+            # Try exact match as fallback
+            product = await find_product(db, name.strip())
+            if product and str(product["_id"]) not in found_names:
+                products.append(product)
+                found_names.add(str(product["_id"]))
+
+    return products
+
+
+async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Get pricing data for a list of products across stores and format for shopping list image.
+
+    Args:
+        db: Database connection
+        products: List of product dictionaries
+
+    Returns:
+        Dictionary formatted for the shopping list image generator
+    """
+    if not products:
+        return {
+            "stores": [],
+            "recommendation": "No products found",
+            "savings": "",
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }
+
+    # Get all active stores
+    stores_cursor = db.stores.find({"is_active": True})
+    stores = await stores_cursor.to_list(length=None)
+
+    if not stores:
+        return {
+            "stores": [],
+            "recommendation": "No stores found",
+            "savings": "",
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }
+
+    # For each store, get prices for all products and calculate total
+    store_totals = []
+    store_items = {}  # Store ID -> list of items with prices
+
+    for store in stores:
+        store_id = str(store["_id"])
+        store_name = f"{store['chain_name']} - {store['branch_name']}"
+
+        # Initialize for this store
+        store_items[store_id] = []
+        total_price = 0.0
+        found_products = 0
+
+        # For each product, get its price at this store
+        for product in products:
+            product_id = str(product["_id"])
+            product_name = product["name"]
+
+            # Look for price of this product at this store
+            price_cursor = db.prices.find({
+                "product_id": product_id,
+                "store_id": store_id
+            }).sort("verified_at", -1).limit(1)  # Get most recent price
+
+            price_doc = await price_cursor.to_list(length=1)
+
+            if price_doc:
+                price = price_doc[0]
+                price_kes = price["price_kes"]
+                is_promotional = price.get("is_promotional", False)
+
+                # Format price
+                price_str = f"{int(price_kes)} KES" if price_kes == int(price_kes) else f"{price_kes:.1f} KES"
+
+                # Add to store items
+                store_items[store_id].append({
+                    "name": product_name,
+                    "price": price_str,
+                    "offer": is_promotional
+                })
+
+                total_price += price_kes
+                found_products += 1
+            else:
+                # Product not available at this store
+                store_items[store_id].append({
+                    "name": product_name,
+                    "price": "N/A",
+                    "offer": False
+                })
+
+        # Only include stores where we found at least one product
+        if found_products > 0:
+            total_str = f"{int(total_price)} KES" if total_price == int(total_price) else f"{total_price:.1f} KES"
+            store_totals.append({
+                "store_id": store_id,
+                "store_name": store_name,
+                "total": total_str,
+                "total_value": total_price,  # For sorting
+                "items": store_items[store_id],
+                "product_count": found_products
+            })
+
+    # Sort stores by total price (ascending)
+    store_totals.sort(key=lambda x: x["total_value"])
+
+    # Format for the image generator
+    stores_for_display = []
+    for store_data in store_totals:
+        stores_for_display.append({
+            "name": store_data["store_name"],
+            "total": store_data["total"],
+            "items": store_data["items"]
+        })
+
+    # Generate recommendation and savings
+    recommendation = ""
+    savings = ""
+
+    if len(stores_for_display) >= 2:
+        cheapest = stores_for_display[0]
+        most_expensive = stores_for_display[-1]
+
+        # Extract numeric values for calculation
+        def parse_price(price_str):
+            try:
+                # Extract number from string like "410 KES" or "410.5 KES"
+                import re
+                match = re.search(r'[\d,]+\.?\d*', price_str)
+                if match:
+                    return float(match.group().replace(',', ''))
+                return 0
+            except:
+                return 0
+
+        cheapest_val = parse_price(cheapest["total"])
+        expensive_val = parse_price(most_expensive["total"])
+
+        if expensive_val > cheapest_val:
+            savings_amount = expensive_val - cheapest_val
+            savings_str = f"{int(savings_amount)} KES" if savings_amount == int(savings_amount) else f"{savings_amount:.1f} KES"
+
+            recommendation = f"{cheapest['name']} - Lowest total"
+            savings = f"Save {savings_str} vs {most_expensive['name']}"
+        else:
+            recommendation = f"All stores have similar pricing"
+    elif len(stores_for_display) == 1:
+        recommendation = f"Only {stores_for_display[0]['name']} has pricing data"
+    else:
+        recommendation = "No pricing data available for any store"
+
+    return {
+        "stores": stores_for_display,
+        "recommendation": recommendation,
+        "savings": savings,
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "item_count": len(products)
+    }
 
 
 async def process_telegram_message(chat_id: int, text: str) -> dict:
@@ -36,37 +310,34 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
     shopping_keywords = ["list", "basket", "shopping", "buy", "get", "shop", "market"]
 
     if any(keyword in text_lower for keyword in shopping_keywords):
-        # Shopping list
-        return {
-            "type": "shopping_list",
-            "data": {
-                "stores": [
-                    {
-                        "name": "Naivas",
-                        "total": "410 KES",
-                        "items": [
-                            {"name": "Tomatoes", "price": "120 KES"},
-                            {"name": "Milk", "price": "60 KES"},
-                            {"name": "Bread", "price": "50 KES"},
-                            {"name": "Eggs", "price": "180 KES"}
-                        ]
-                    },
-                    {
-                        "name": "Quickmart",
-                        "total": "390 KES",
-                        "items": [
-                            {"name": "Tomatoes", "price": "110 KES"},
-                            {"name": "Milk", "price": "55 KES"},
-                            {"name": "Bread", "price": "48 KES"},
-                            {"name": "Eggs", "price": "177 KES"}
-                        ]
-                    }
-                ],
-                "recommendation": "Quickmart - Lowest total",
-                "savings": "20 KES vs Naivas",
-                "date": "2026-06-26"
+        # Shopping list - process the request to get real data
+        db = await get_database()
+
+        # Extract potential product names from the text
+        product_names = extract_product_names_from_shopping_list(text)
+        logger.info(f"Extracted product names: {product_names}")
+
+        # Look up the products in the database
+        products = await get_products_for_shopping_list(db, product_names)
+        logger.info(f"Found {len(products)} products: {[p['name'] for p in products]}")
+
+        # Get shopping list data (prices across stores)
+        if products:
+            processed = await get_shopping_list_data(db, products)
+            processed["type"] = "shopping_list"
+            return processed
+        else:
+            # No products found
+            return {
+                "type": "shopping_list",
+                "data": {
+                    "stores": [],
+                    "recommendation": "No products found in your query. Try specific product names like 'unga', 'sugar', or 'cooking oil'.",
+                    "savings": "",
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "item_count": 0
+                }
             }
-        }
     else:
         # Single product - use enhanced matching (exact + fuzzy + aliases) to find product.
         # NOTE: This replaces the old exact-only lookup with NLP-powered matching.
@@ -216,6 +487,8 @@ async def telegram_webhook(
         if savings:
             lines.append(f"Savings: {savings}")
         lines.append(f"Date: {data.get('date', 'N/A')}")
+        if data.get("item_count"):
+            lines.append(f"Items: {data['item_count']}")
         fallback_text = "\n".join(lines)
 
     # Send the fallback text
