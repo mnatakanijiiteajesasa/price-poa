@@ -7,7 +7,23 @@ echo "Starting PricePoa Intelligence Service..."
 
 # Wait for MongoDB to be ready
 echo "Waiting for MongoDB to be ready..."
-until mongosh "$MONGODB_URI" --eval "db.runCommand({ ping: 1 })" --quiet; do
+until python -c "
+import asyncio
+import sys
+from motor.motor_asyncio import AsyncIOMotorClient
+
+async def test():
+    try:
+        client = AsyncIOMotorClient('$MONGODB_URI')
+        await client.admin.command('ping')
+        print('MongoDB is ready')
+        sys.exit(0)
+    except Exception as e:
+        print('MongoDB is unavailable:', e)
+        sys.exit(1)
+
+asyncio.run(test())
+"; do
   echo "MongoDB is unavailable - sleeping"
   sleep 5
 done
