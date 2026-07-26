@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code and shared folders
 COPY api/ .
 COPY database/ ./database
+COPY intelligence/ ./intelligence
 
 
 # Expose the port the app runs on
