@@ -6,7 +6,7 @@ FastAPI webhook endpoint for the Telegram Bot API - receives messages, sends rep
 from fastapi import APIRouter, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 import logging
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
@@ -14,7 +14,7 @@ from infographics.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
 )
-from query_engine import get_product_prices, find_product, query_single_product
+from query_engine import get_product_prices, find_product
 from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_enhanced
 
@@ -323,9 +323,31 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
 
         # Get shopping list data (prices across stores)
         if products:
-            processed = await get_shopping_list_data(db, products)
-            processed["type"] = "shopping_list"
-            return processed
+            try:
+                shopping_list_data = await get_shopping_list_data(db, products)
+                return {
+                    "type": "shopping_list",
+                    "data": {
+                        "stores": shopping_list_data["stores"],
+                        "recommendation": shopping_list_data["recommendation"],
+                        "savings": shopping_list_data["savings"],
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "item_count": len(products)
+                    }
+                }
+            except Exception as e:
+                logger.error(f"Error generating shopping list data: {e}")
+                # Fallback to a simple response if data generation fails
+                return {
+                    "type": "shopping_list",
+                    "data": {
+                        "stores": [],
+                        "recommendation": "Unable to retrieve pricing data at this time. Please try again later.",
+                        "savings": "",
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "item_count": len(products)
+                    }
+                }
         else:
             # No products found
             return {
@@ -446,9 +468,15 @@ async def telegram_webhook(
     image_bytes = None
     try:
         if processed["type"] == "single_product":
-            image_bytes = generate_single_product_image(processed["data"])
+            if "data" in processed:
+                image_bytes = generate_single_product_image(processed["data"])
+            else:
+                logger.error("Missing 'data' key in processed for single_product")
         elif processed["type"] == "shopping_list":
-            image_bytes = generate_shopping_list_image(processed["data"])
+            if "data" in processed:
+                image_bytes = generate_shopping_list_image(processed["data"])
+            else:
+                logger.error("Missing 'data' key in processed for shopping_list")
     except Exception as e:
         logger.error(f"Error generating image: {e}")
         image_bytes = None
