@@ -91,7 +91,7 @@ class ProductMatcher:
                     }
 
             # Add Sheng aliases
-            for alias in sheng_ in sheng_aliases:
+            for alias in sheng_aliases:
                     if alias:
                         index[alias] = {
                             "product_id": product_id,
