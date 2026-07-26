@@ -7,7 +7,7 @@ echo "Starting PricePoa Intelligence Service..."
 
 # Wait for MongoDB to be ready
 echo "Waiting for MongoDB to be ready..."
-until mongosh "$MONGODB_URI/$MONGODB_DB" --eval "db.runCommand({ ping: 1 })" --quiet; do
+until mongosh "$MONGODB_URI" --eval "db.runCommand({ ping: 1 })" --quiet; do
   echo "MongoDB is unavailable - sleeping"
   sleep 5
 done
