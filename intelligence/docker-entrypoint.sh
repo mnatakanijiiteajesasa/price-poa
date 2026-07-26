@@ -38,7 +38,7 @@ sys.path.insert(0, '/app')
 print('Python path:', sys.path)
 import asyncio
 import logging
-from intelligence import initialize_intelligence
+from intelligence_engine import initialize_intelligence
 from motor.motor_asyncio import AsyncIOMotorClient
 
 async def init():
@@ -69,7 +69,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
-from intelligence import intelligence_engine
+from intelligence_engine import intelligence_engine
 from motor.motor_asyncio import AsyncIOMotorClient
 
 logging.basicConfig(level=logging.INFO)
