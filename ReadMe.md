@@ -1,8 +1,8 @@
 # PricePoa — Development & Operations Guide
 
-**WhatsApp and Telegram-native price intelligence agent for Kenya**
+**WhatsApp and Telegram-native price intelligence agent for Kenya (under development)**
 
-Kenya's instant, location-aware grocery price comparison tool. This repository contains the scraper engine, backend API, Telegram bot endpoint, and database pipelines to crawl, normalize, and compare supermarket prices in real-time.
+Kenya's location-aware grocery price comparison tool. This repository contains the scraper engine, backend API, Telegram bot endpoint, and database pipelines to crawl, normalize, and compare supermarket prices.
 
 ---
 
@@ -150,7 +150,22 @@ sudo docker compose logs -f api
 
 ---
 
-## 6. Stop and Clean Up Services
+## 6. Intelligence Layer (NLP Capabilities)
+
+Phase 4 of the project introduced natural language processing capabilities via the intelligence engine. This layer includes:
+
+- **Anomaly Detection**: Isolation Forest model to detect unusual price spikes or drops.
+- **Product Recommendations**: Cosine similarity-based recommender to suggest substitutes or complementary products.
+- **Price Correlation Tracking**: Pearson correlation analysis to identify leader-follower relationships between products across stores.
+- **Query Trend Aggregation**: Analysis of user search queries to identify trending products and seasonal demand.
+
+These components are orchestrated by the `IntelligenceEngine` class in `intelligence/intelligence_engine.py` and can be invoked via the API endpoints or background workers.
+
+The intelligence components are initialized and maintained via the `initialize_intelligence` and `run_intelligence_maintenance` functions, which train/update models using recent data from the MongoDB database.
+
+---
+
+## 7. Stop and Clean Up Services
 
 * **Stop all containers** (leaves database volumes intact):
   ```bash
@@ -163,7 +178,7 @@ sudo docker compose logs -f api
 
 ---
 
-## 7. Troubleshooting & Common Mismatches
+## 8. Troubleshooting & Common Mismatches
 
 ### 1. `ValueError: "...Queue" does not support CONCURRENT_REQUESTS_PER_IP`
 * **Cause**: Modern Scrapy uses `DownloaderAwarePriorityQueue` which limits concurrency by domain, not IP.
@@ -177,10 +192,12 @@ sudo docker compose logs -f api
 * **Cause**: Supermarkets block scrapers in their robots.txt policies.
 * **Resolution**: Set `ROBOTSTXT_OBEY = False` in `settings.py`. Additionally, ensure `allowed_domains` in spiders consists of raw hosts (e.g., `['carrefour.ke']`), not full URLs.
 
-### 4. missing or empty required field: `Product ID` in Pipelines
+### 4. `missing or empty required field: Product ID` in Pipelines
 * **Cause**: Item validation runs before normalization, checking fields that aren't populated yet.
 * **Resolution**: Swapped pipeline priorities in `settings.py` so `NormalizationPipeline` runs first (`300`) to match items to database entities, followed by `PriceValidationPipeline` (`400`).
 
 ### 5. `NotImplementedError: Database objects do not implement truth value testing`
 * **Cause**: PyMongo 4+ raises an error when comparing databases or collections in boolean contexts (`if not self.db`).
 * **Resolution**: Use explicit `None` checks (`if self.db is None`) instead.
+
+---
