@@ -240,11 +240,15 @@ class PriceCorrelationTracker:
                         if correlation is None:
                             continue
 
-                        # Detect lead-lag relationship
-                        lag_days, lag_correlation = self.detect_lead_lag_relationship(
-                            data1['prices'], data2['prices'],
-                            data1['timestamps'], data2['timestamps']
-                        )
+                        # Detect lead-lag relationship with recursion protection
+                        try:
+                            lag_days, lag_correlation = self.detect_lead_lag_relationship(
+                                data1['prices'], data2['prices'],
+                                data1['timestamps'], data2['timestamps']
+                            )
+                        except RecursionError:
+                            logger.warning(f"Recursion error in detect_lead_lag_relationship for product {product_id}, stores {store1_id}-{store2_id}")
+                            lag_days, lag_correlation = None, None
 
                         # Store correlation data
                         correlation_key = (product_id, store1_id, store2_id)

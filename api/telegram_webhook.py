@@ -7,13 +7,14 @@ from fastapi import APIRouter, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 import logging
 from typing import Optional
+from datetime import datetime, timezone
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
 from infographics.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
 )
-from query_engine import query_single_product
+from query_engine import query_single_product, find_product
 from database.connection import get_database
 
 logger = logging.getLogger("uvicorn.error")
@@ -136,6 +137,26 @@ async def telegram_webhook(
         fallback_text = "Sorry, I encountered an error processing your request. Please try again."
         send_telegram_text(chat_id, fallback_text)
         return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Log query for analytics
+    try:
+        db = await get_database()
+        query_log = {
+            "user_id": chat_id,
+            "text": text,
+            "timestamp": datetime.now(timezone.utc),
+            "products": [],  # will fill if we have product IDs
+        }
+        if processed.get("type") == "single_product":
+            # Try to get product ID from the processed data? Not present.
+            # Instead, we can look up product by text again.
+            product = await find_product(db, text)
+            if product:
+                query_log["products"] = [str(product["_id"])]
+        # For other types, leave products empty
+        await db.query_logs.insert_one(query_log)
+    except Exception as e:
+        logger.error(f"Failed to log query: {e}")
 
     if processed["type"] == "not_found":
         query_text = processed["data"]["query_text"]
