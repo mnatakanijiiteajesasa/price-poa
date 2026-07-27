@@ -6,6 +6,7 @@ from scrapy.http import Response
 from typing import Generator, Dict, Any, Optional
 from urllib.parse import urljoin
 import re
+import html
 import logging
 from base_spider import BasePricePoaSpider
 
@@ -102,6 +103,7 @@ class NaivasSpider(BasePricePoaSpider):
             for script in response.xpath('//script[@type="application/ld+json"]/text()').getall():
                 import json
                 try:
+                    script = html.unescape(script)
                     data = json.loads(script)
                     data_list = data if isinstance(data, list) else [data]
                     for item in data_list:
