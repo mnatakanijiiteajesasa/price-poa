@@ -334,14 +334,32 @@ def generate_shopping_list_image(data: dict) -> bytes:
     subtitle = f"Verified {date_str}" + (f"  \u2022  {item_count} items" if item_count else "")
 
     stores = data.get("stores", [])
-    parsed = []
+    # Parse store data and sort by total price
+    parsed_stores = []
     for s in stores:
-        parsed.append({"name": s.get("name", "Unknown"), "value": parse_amount(s.get("total", 0))})
-    parsed.sort(key=lambda s: s["value"])
-    max_value = max((s["value"] for s in parsed), default=1) or 1
+        parsed_stores.append({
+            "name": s.get("name", "Unknown"),
+            "total": parse_amount(s.get("total", 0)),
+            "items": s.get("items", []),  # Keep the items data
+        })
+    parsed_stores.sort(key=lambda s: s["total"])
+    max_value = max((s["total"] for s in parsed_stores), default=1) or 1
 
     content_width = IMG_WIDTH - 2 * PADDING
-    rows_height = len(parsed) * (92 + 14) if parsed else 40
+
+    # Calculate height needed: header + sections + for each store: store title + product rows + spacing
+    if parsed_stores:
+        # For each store: store title row + product rows + padding between stores
+        store_rows_height = 0
+        for store in parsed_stores:
+            # Store title (one row)
+            store_rows_height += 92 + 14
+            # Product rows (one row per product)
+            store_rows_height += len(store["items"]) * (92 + 14)
+        rows_height = store_rows_height
+    else:
+        rows_height = 40
+
     recommendation = data.get("recommendation", "")
     savings = data.get("savings", "")
     callout_height = 98 if (recommendation or savings) else 0
@@ -355,19 +373,47 @@ def generate_shopping_list_image(data: dict) -> bytes:
     y = draw_header(img, draw, "SHOPPING LIST", "Basket Comparison", subtitle)
     y += 22
 
-    if parsed:
-        y = draw_section_title(draw, y, "Store Totals")
-        for rank, s in enumerate(parsed):
-            y = draw_ranked_row(draw, y, content_width, s["name"], f"KES {s['value']:,.0f}",
-                                 s["value"], max_value, rank)
+    if parsed_stores:
+        y = draw_section_title(draw, y, "Store Comparison")
+        for store_rank, store in enumerate(parsed_stores):
+            # Draw store title as a section header
+            store_header_text = f"{store['name']} - KES {store['total']:,.0f}"
+            if store_rank == 0:  # Best price store
+                store_header_text += " (BEST PRICE)"
 
-        if recommendation or savings:
-            headline = recommendation or "Best combination found"
-            subline = f"Total savings: {savings}" if savings else ""
-            y = draw_callout(draw, y, content_width, headline, subline)
+            # Draw a subtle separator or header for the store
+            y = draw_section_title(draw, y, store_header_text)
+
+            # Draw products for this store
+            if store["items"]:
+                # Sort products by name for consistent display
+                sorted_items = sorted(store["items"], key=lambda x: x.get("name", ""))
+                for item in sorted_items:
+                    product_name = item.get("name", "Unknown")
+                    price_str = item.get("price", "0 KES")
+                    is_offer = item.get("offer", False)
+
+                    # For product rows, use a rank that won't show special styling (like rank=999)
+                    # But fix the negative indexing issue in draw_ranked_row
+                    product_rank = 999  # High rank to avoid special styling
+                    y = draw_ranked_row(draw, y, content_width, f"  {product_name}", price_str,
+                                        parse_amount(price_str), max_value, product_rank, is_offer=is_offer)
+            else:
+                # No products for this store
+                draw.text((PADDING + 20, y), "  No products available", fill=TEXT_MUTED, font=get_font(FONT_SIZE_BODY))
+                y += FONT_SIZE_BODY + 14
+
+            # Add spacing between stores (except after the last store)
+            if store_rank < len(parsed_stores) - 1:
+                y += 20
     else:
         draw.text((PADDING, y), "No basket data available yet.", fill=TEXT_MUTED, font=get_font(FONT_SIZE_BODY))
         y += FONT_SIZE_BODY + 20
+
+    if recommendation or savings:
+        headline = recommendation or "Best combination found"
+        subline = f"Total savings: {savings}" if savings else ""
+        y = draw_callout(draw, y, content_width, headline, subline)
 
     footer_top = canvas_height - footer_height
     draw_footer(img, draw, footer_top, canvas_height, "Prices verified by PricePoa")
