@@ -260,7 +260,7 @@ class ProductMatcher:
             return exact_match
 
         # If no exact match, try fuzzy matching
-        fuzzy_matches = await self.find_product_fuzzy(query_text, threshold=0.5)
+        fuzzy_matches = await self.find_product_fuzzy(query_text, threshold=0.7)
 
         if fuzzy_matches:
             best_match = fuzzy_matches[0]  # Already sorted by confidence
