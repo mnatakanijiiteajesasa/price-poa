@@ -8,15 +8,16 @@ from fastapi.responses import JSONResponse
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+from bson import ObjectId
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
 from infographics.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
 )
-from query_engine import get_product_prices, find_product
+from query_engine import get_product_prices
 from database.connection import get_database
-from intelligence.nlp.product_matcher import find_product_enhanced
+from intelligence.nlp.product_matcher import find_product_enhanced, find_product_fuzzy
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -56,67 +57,125 @@ def extract_product_names_from_shopping_list(text: str) -> List[str]:
     # Split by the pipe delimiter we introduced
     parts = [part.strip() for part in text_lower.split("|") if part.strip()]
 
-    # Further split by spaces and filter out empty strings and common words
-    words = []
-    common_words = {"a", "an", "the", "of", "for", "in", "on", "at", "to", "from",
-                   "kg", "g", "gms", "ml", "l", "ltr", "liter", "liter", "piece",
-                   "pieces", "pc", "pcs", "bottle", "bottles", "packet", "packets",
-                   "pack", "packs", "can", "cans", "jar", "jars", "tin", "tins",
-                   "bag", "bags", "pouch", "pouches", "box", "boxes"}
+    # Extract meaningful terms
+    terms = []
 
-    for part in parts:
-        # Split by spaces and take meaningful words
-        subparts = part.split()
-        for word in subparts:
-            # Remove any trailing/leading punctuation
-            word = word.strip(".,!?;:")
-            if word and word not in common_words and len(word) > 1:
-                words.append(word)
+    # First, add the cleaned text itself if it's substantial
+    cleaned_text = text_lower.strip()
+    if len(cleaned_text) > 2 and not cleaned_text.isdigit():
+        terms.append(cleaned_text)
 
-    # Also try to keep multi-word combinations (like "maize flour")
-    # by looking at 2-3 word combinations
-    multi_word_candidates = []
+    # Extract meaningful multi-word combinations (2-3 words)
     words_with_pos = text_lower.split()
     for i in range(len(words_with_pos)):
         # 2-word combinations
         if i < len(words_with_pos) - 1:
             two_word = f"{words_with_pos[i]} {words_with_pos[i+1]}"
             two_word = two_word.strip(".,!?;:")
-            if len(two_word) > 3:  # Avoid very short combinations
-                multi_word_candidates.append(two_word)
+            # Only add if it's not just common words and has sufficient length
+            if len(two_word) > 3 and not _is_meaningless_phrase(two_word):
+                terms.append(two_word)
         # 3-word combinations
         if i < len(words_with_pos) - 2:
             three_word = f"{words_with_pos[i]} {words_with_pos[i+1]} {words_with_pos[i+2]}"
             three_word = three_word.strip(".,!?;:")
-            if len(three_word) > 3:
-                multi_word_candidates.append(three_word)
+            # Only add if it's not just common words and has sufficient length
+            if len(three_word) > 3 and not _is_meaningless_phrase(three_word):
+                terms.append(three_word)
 
-    # Combine single words and multi-word candidates, removing duplicates
-    all_candidates = list(set(words + multi_word_candidates))
+    # Extract single meaningful words (nouns, etc.) but be very selective
+    # Skip extremely common words that are unlikely to be product names
+    stop_words = {"a", "an", "the", "of", "for", "in", "on", "at", "to", "from",
+                  "with", "by", "is", "are", "was", "were", "be", "been", "being",
+                  "have", "has", "had", "do", "does", "did", "will", "would", "should",
+                  "could", "may", "might", "must", "can", "and", "or", "but", "in",
+                  "on", "at", "to", "for", "of", "with", "by", "about", "like",
+                  "through", "over", "before", "between", "after", "since", "without",
+                  "under", "within", "along", "following", "across", "behind",
+                  "beyond", "plus", "except", "but", "up", "down", "in", "out",
+                  "on", "off", "over", "under", "again", "further", "then", "once",
+                  "here", "there", "when", "where", "why", "how", "all", "any",
+                  "both", "each", "few", "more", "most", "other", "some", "such",
+                  "no", "nor", "not", "only", "own", "same", "so", "than", "too",
+                  "very", "s", "t", "can", "will", "just", "don", "should", "now"}
 
-    # Filter out anything that looks like a quantity or unit
-    filtered_candidates = []
-    quantity_indicators = {"kg", "g", "mg", "ml", "l", "litre", "liter",
-                          "piece", "pieces", "pc", "pcs", "bottle", "bottles",
-                          "packet", "packets", "pack", "packs", "can", "cans",
-                          "jar", "jars", "tin", "tins", "bag", "bags",
-                          "pouch", "pouches", "box", "boxes", "dozen"}
+    # Also skip units and quantities as they're handled elsewhere
+    unit_words = {"kg", "g", "mg", "ml", "l", "ltr", "liter", "litre",
+                  "piece", "pieces", "pc", "pcs", "bottle", "bottles",
+                  "packet", "packets", "pack", "packs", "can", "cans",
+                  "jar", "jars", "tin", "tins", "bag", "bags",
+                  "pouch", "pouches", "box", "boxes", "dozen"}
 
-    for candidate in all_candidates:
-        # Skip if it's just a number or number + unit
-        if any(candidate.startswith(q) or candidate.endswith(q) for q in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]):
-            # Check if it's just a number or number followed by a unit
-            import re
-            if re.match(r'^\d+\s*(kg|g|mg|ml|l|litre|liter|pcs?|bottles?|packets?|packs?|cans?|jars?|tins?|bags?|pouches?|boxes?|dozen)?$', candidate):
-                continue
-        filtered_candidates.append(candidate)
+    for part in parts:
+        # Split by spaces and consider each word
+        subparts = part.split()
+        for word in subparts:
+            # Remove any trailing/leading punctuation
+            word = word.strip(".,!?;:")
+            # Only consider words that are not too short, not stop words, and not units
+            if (len(word) > 2 and
+                word not in stop_words and
+                word not in unit_words and
+                not word.isdigit()):  # Not just a number
+                terms.append(word)
 
-    return filtered_candidates
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_terms = []
+    for term in terms:
+        if term not in seen:
+            seen.add(term)
+            unique_terms.append(term)
+
+    return unique_terms
+
+
+def _is_meaningless_phrase(phrase: str) -> bool:
+    """
+    Check if a phrase is likely to be meaningless for product matching.
+
+    Args:
+        phrase: The phrase to check
+
+    Returns:
+        True if the phrase is likely meaningless, False otherwise
+    """
+    # Common meaningless phrases
+    meaningless_patterns = [
+        "the ", "and ", "or ", "but ", "in ", "on ", "at ", "to ", "for ",
+        "of ", "with ", "by ", "is ", "are ", "was ", "were ", "be ", "been ",
+        "have ", "has ", "had ", "do ", "does ", "did ", "will ", "would ",
+        "should ", "could ", "may ", "might ", "must ", "can ", "it ", "its ",
+        "this ", "that ", "these ", "those ", "he ", "she ", "they ", "we ",
+        "you ", "i ", "me ", "him ", "her ", "us ", "them "
+    ]
+
+    phrase_lower = phrase.lower() + " "  # Add space to match patterns
+    for pattern in meaningless_patterns:
+        if phrase_lower.startswith(pattern):
+            return True
+
+    # Also check if it's mostly just common words
+    words = phrase.split()
+    if len(words) > 0:
+        meaningless_words = {"the", "and", "or", "but", "in", "on", "at", "to", "for",
+                           "of", "with", "by", "is", "are", "was", "were", "be", "been",
+                           "have", "has", "had", "do", "does", "did", "will", "would",
+                           "should", "could", "may", "might", "must", "can", "it", "its",
+                           "this", "that", "these", "those", "he", "she", "they", "we",
+                           "you", "i", "me", "him", "her", "us", "them", "a", "an"}
+        meaningful_count = sum(1 for w in words if w.lower() not in meaningless_words)
+        # If less than 30% of words are meaningful, consider the phrase meaningless
+        if len(words) > 0 and (meaningful_count / len(words)) < 0.3:
+            return True
+
+    return False
 
 
 async def get_products_for_shopping_list(db, product_names: List[str]) -> List[Dict[str, Any]]:
     """
     Look up products by name for a shopping list.
+    For each product name, selects the cheapest matching product variant.
 
     Args:
         db: Database connection
@@ -132,14 +191,68 @@ async def get_products_for_shopping_list(db, product_names: List[str]) -> List[D
         if not name or len(name.strip()) < 2:
             continue
 
-        # Try to find the product using enhanced matching
-        product = await find_product_enhanced(db, name.strip())
-        if product and str(product["_id"]) not in found_names:
-            products.append(product)
-            found_names.add(str(product["_id"]))
+        # Get multiple product matches by confidence
+        matches = await find_product_fuzzy(db, name.strip(), threshold=0.3)
+        # Take top 5 matches by confidence to consider for price-based selection
+        matches = matches[:5] if len(matches) > 5 else matches
+
+        best_match = None
+        best_price = float('inf')  # Start with infinity as worst price
+
+        # Evaluate each match to find the cheapest one
+        for match in matches:
+            product_id = match["product_id"]
+            # Skip if we've already added this product
+            if product_id in found_names:
+                continue
+
+            # Get prices for this product to determine its cost
+            try:
+                # Create a minimal product dict for get_product_prices
+                product_for_pricing = {"_id": product_id}
+                prices_data = await get_product_prices(db, product_for_pricing)
+
+                if prices_data and "stores" in prices_data and prices_data["stores"]:
+                    # Extract prices and find the minimum
+                    min_price = float('inf')
+                    for store in prices_data["stores"]:
+                        price_str = store.get("price", "0 KES")
+                        # Parse the price (e.g., "100 KES" -> 100)
+                        try:
+                            price_value = float(price_str.split()[0])
+                            if price_value < min_price:
+                                min_price = price_value
+                        except (ValueError, IndexError):
+                            # If we can't parse, skip this store's price
+                            continue
+
+                    # If we found valid prices, use the minimum
+                    if min_price != float('inf'):
+                        if min_price < best_price:
+                            best_price = min_price
+                            best_match = match
+                # If no prices found, we might still want to consider the product
+                # but give it a high price so it's less likely to be selected
+                elif best_price == float('inf'):  # Only if we haven't found any priced products yet
+                    best_price = float('inf')  # Keep as infinity
+                    best_match = match  # Fallback to this match if no others have prices
+
+            except Exception as e:
+                logger.error(f"Error processing product match {product_id}: {e}")
+                continue
+
+        # If we found a best match, get the full product and add it
+        if best_match:
+            try:
+                product = await db.products.find_one({"_id": ObjectId(best_match["product_id"])})
+                if product and str(product["_id"]) not in found_names:
+                    products.append(product)
+                    found_names.add(str(product["_id"]))
+            except Exception as e:
+                logger.error(f"Error fetching product {best_match['product_id']}: {e}")
         else:
-            # Try exact match as fallback
-            product = await find_product(db, name.strip())
+            # Fallback to the original behavior if our new method didn't work
+            product = await find_product_enhanced(db, name.strip())
             if product and str(product["_id"]) not in found_names:
                 products.append(product)
                 found_names.add(str(product["_id"]))
