@@ -305,6 +305,14 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
     """
     logger.info(f"Processing message from {chat_id}: {text}")
 
+    # Handle /start command
+    if text.startswith("/start"):
+        # Return a special response type for start command
+        return {
+            "type": "start",
+            "data": {}
+        }
+
     # Simple heuristic for now
     text_lower = text.lower()
     shopping_keywords = ["list", "basket", "shopping", "buy", "get", "shop", "market"]
@@ -462,6 +470,14 @@ async def telegram_webhook(
             "Try the exact product name, e.g. \"Cooking Oil\" or \"unga\"."
         )
         send_telegram_text(chat_id, fallback_text)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle start command
+    if processed["type"] == "start":
+        welcome_text = (
+            "welcome to pricepoa, your shopping partner, we help you find the best prices in you area by typing the product you need or a list of your entire shopping"
+        )
+        send_telegram_text(chat_id, welcome_text)
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
     # Generate the infographic
