@@ -362,7 +362,7 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
                 "type": "shopping_list",
                 "data": {
                     "stores": [],
-                    "recommendation": "No products found in your query. Try specific product names like 'unga', 'sugar', or 'cooking oil'.",
+                    "recommendation": "No products found in your query. Try common product names like 'unga', 'sugar', or 'cooking oil'.",
                     "savings": "",
                     "date": datetime.now().strftime("%Y-%m-%d"),
                     "item_count": 0
@@ -475,7 +475,7 @@ async def telegram_webhook(
     # Handle start command
     if processed["type"] == "start":
         welcome_text = (
-            "Welcome to PricePoa, your ultimate shopping partner, we help you find the best prices in you area by typing the product you need or a list of your entire shopping. Let's get Shopping!🛒"
+            "Welcome to PricePoa, your ultimate shopping partner, we help you find the best prices in you area by typing the products you need or a list of your entire shopping. Let's get Shopping!🛒"
         )
         send_telegram_text(chat_id, welcome_text)
         return JSONResponse(status_code=200, content={"status": "accepted"})
