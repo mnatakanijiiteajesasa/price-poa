@@ -51,17 +51,17 @@ async def dashboard(request: Request):
             "timestamp": q["timestamp"].strftime("%Y-%m-%d %H:%M")
         })
 
-    return templates.TemplateResponse(
-        "admin/dashboard.html",
-        {
-            "request": request,
-            "total_queries": total_queries,
-            "today_queries": today_queries,
-            "today_unique_users": today_unique_users,
-            "total_users": total_users,
-            "recent_queries": recent_formatted
-        }
-    )
+        return templates.TemplateResponse(
+            request,
+            "admin/dashboard.html",
+            {
+                "total_queries": total_queries,
+                "today_queries": today_queries,
+                "today_unique_users": today_unique_users,
+                "total_users": total_users,
+                "recent_queries": recent_formatted
+            }
+        )
 
 @admin_router.get("/trends", response_class=HTMLResponse)
 async def trends(request: Request):
