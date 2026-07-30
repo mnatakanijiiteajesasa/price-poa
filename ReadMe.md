@@ -75,9 +75,12 @@ To trigger an immediate scraping run of all active spiders and bypass the schedu
 ```bash
 sudo docker compose run --rm scraper python worker.py --mode once
 ```
+### manually triggering one scraper i.e the bar spider
+docker compose run --rm scraper python scraper/worker.py --mode once --spider thebar_spider
 
----
-
+### scaper diagnostic too
+docker compose run --rm scraper python inspect_selectors.py https://ke.thebar.com/collections/party
+ 
 ## 4. Viewing Database Contents
 
 There are three ways to view and query your scraped price data:
