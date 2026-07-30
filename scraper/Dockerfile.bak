@@ -7,24 +7,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container
-WORKDIR /app/scraper
+WORKDIR /app
 
-# Copy scrapy project configuration
-COPY scrapy.cfg /app/scraper/scrapy.cfg
-
-# Copy the scraper app code
-COPY scraper /app/scraper
-
-# Copy the shared database package (needed for pipelines)
-COPY database /app/scraper/database
-
-# Install Python dependencies
+# Copy the requirements file and install dependencies
 COPY scraper/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright browsers
 RUN playwright install --with-deps
 RUN python -m invisible_playwright fetch
+
+# Copy the scraper app code
+COPY scraper/ .
+
+# Copy the shared database package
+COPY database/ ./database
 
 # Set environment variables for scraping
 ENV SCRAPER_LOG_LEVEL=info
