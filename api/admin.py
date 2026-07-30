@@ -14,16 +14,21 @@ logger = logging.getLogger("uvicorn.error")
 # Create router
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
-# Set up templates
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+# Set up templates - handle potential path issues
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+# If the file is in an api/ subdirectory, use the parent directory as base
+if current_file_dir.endswith('/api'):
+    base_dir = os.path.dirname(current_file_dir)
+else:
+    base_dir = current_file_dir
+templates = Jinja2Templates(directory=os.path.join(base_dir, "templates"))
 
 # Helper to get database
 async def get_db():
     from database.connection import get_database
     return await get_database()
 
-@admin_router.get("/", response_class=HTMLResponse)
+@admin_router.get("/", response_class=HTMLResponse, name="admin.dashboard")
 async def dashboard(request: Request):
     """Admin dashboard showing key metrics"""
     db = await get_db()
@@ -65,7 +70,7 @@ async def dashboard(request: Request):
         }
     )
 
-@admin_router.get("/trends", response_class=HTMLResponse)
+@admin_router.get("/trends", response_class=HTMLResponse, name="admin.trends")
 async def trends(request: Request):
     """Trends page showing query trends over time"""
     db = await get_db()
@@ -109,7 +114,7 @@ async def trends(request: Request):
         }
     )
 
-@admin_router.get("/popular", response_class=HTMLResponse)
+@admin_router.get("/popular", response_class=HTMLResponse, name="admin.popular")
 async def popular(request: Request):
     """Popular products page"""
     db = await get_db()
@@ -142,7 +147,7 @@ async def popular(request: Request):
         }
     )
 
-@admin_router.get("/traffic", response_class=HTMLResponse)
+@admin_router.get("/traffic", response_class=HTMLResponse, name="admin.traffic")
 async def traffic(request: Request):
     """Traffic patterns page"""
     db = await get_db()
