@@ -2,6 +2,7 @@
 Admin panel routes for PricePoa
 Provides dashboards for viewing trends, popular products, traffic stats, etc.
 """
+import os
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -14,7 +15,8 @@ logger = logging.getLogger("uvicorn.error")
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Set up templates
-templates = Jinja2Templates(directory="api/templates")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # Helper to get database
 async def get_db():
