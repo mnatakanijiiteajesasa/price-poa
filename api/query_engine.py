@@ -12,35 +12,34 @@ from typing import Optional, Dict, Any, List
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-# Import the product matcher for fuzzy matching
-from intelligence.nlp.product_matcher import find_product_enhanced
-
 logger = logging.getLogger("uvicorn.error")
 
 
-async def find_product(db: AsyncIOMotorDatabase, query_text: str) -> Optional[dict]:
+def _build_product_match_query(query_text: str) -> dict:
     """
-    Find a single product document matching the given text using enhanced matching
-    (exact + fuzzy + aliases). Returns None if nothing matches.
-
-    Args:
-        db: MongoDB database connection
-        query_text: The text to search for
-
-    Returns:
-        Product document or None if not found
+    Case-insensitive EXACT match (not substring) against product name,
+    swahili_aliases, or sheng_aliases. Anchored so 'tea' doesn't also
+    match 'tea leaves' via partial overlap - once the NLP parser exists
+    it should pass the cleaned entity text in here, not raw free text.
     """
-    if not query_text or not query_text.strip():
-        return None
+    escaped = re.escape(query_text.strip())
+    pattern = f"^{escaped}$"
+    return {
+        "$or": [
+            {"name": {"$regex": pattern, "$options": "i"}},
+            {"swahili_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
+            {"sheng_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
+        ]
+    }
 
-    # Use enhanced matching (exact + fuzzy + aliases) to find the product
-    product = await find_product_enhanced(db, query_text.strip())
 
-    if product:
-        logger.info(f"Found product '{product['name']}' for query '{query_text}' using enhanced matching")
-    else:
-        logger.info(f"No product matched query_text={query_text!r} using enhanced matching")
-
+async def find_product(db, query_text: str) -> Optional[dict]:
+    """
+    Find a single product document matching the given text against its
+    name or aliases. Returns None if nothing matches.
+    """
+    query = _build_product_match_query(query_text)
+    product = await db.products.find_one(query)
     return product
 
 

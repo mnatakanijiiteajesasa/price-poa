@@ -75,7 +75,7 @@ class ProductMatcher:
             if name:
                 index[name] = {
                     "product_id": product_id,
-                    "product_name": product["name"],
+                    "product_name": product.get("name", ""),
                     "match_type": "exact",
                     "confidence": 1.0
                 }
@@ -85,7 +85,7 @@ class ProductMatcher:
                 if alias:
                     index[alias] = {
                         "product_id": product_id,
-                        "product_name": product["name"],
+                        "product_name": product.get("name", ""),
                         "match_type": "swahili_alias",
                         "confidence": 0.95
                     }
@@ -95,7 +95,7 @@ class ProductMatcher:
                     if alias:
                         index[alias] = {
                             "product_id": product_id,
-                            "product_name": product["name"],
+                            "product_name": product.get("name", ""),
                             "match_type": "sheng_alias",
                             "confidence": 0.9
                         }
