@@ -220,6 +220,65 @@ def extract_meaningful_product_terms(text: str) -> List[str]:
     return filtered_terms
 
 
+async def find_alternative_product_in_store(db, product: dict, store_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Find an alternative product in a specific store when the exact product is not available.
+    Looks for products with similar names or aliases that ARE available in the store.
+
+    Args:
+        db: Database connection
+        product: The original product dictionary
+        store_id: The store ID to check for alternatives
+
+    Returns:
+        Alternative product dictionary or None if not found
+    """
+    try:
+        product_name = product.get("name", "").lower()
+        if not product_name:
+            return None
+
+        # Get product aliases
+        swahili_aliases = [alias.lower() for alias in product.get("swahili_aliases", [])]
+        sheng_aliases = [alias.lower() for alias in product.get("sheng_aliases", [])]
+
+        # All possible names to search for
+        search_terms = [product_name] + swahili_aliases + sheng_aliases
+
+        # Remove duplicates and empty strings
+        search_terms = list(set([term.strip() for term in search_terms if term.strip()]))
+
+        # Search for products in the store that match our search terms
+        for term in search_terms:
+            # Build query for products matching this term in name or aliases
+            query = {
+                "$or": [
+                    {"name": {"$regex": f"^{term}$", "$options": "i"}},
+                    {"swahili_aliases": {"$elemMatch": {"$regex": f"^{term}$", "$options": "i"}}},
+                    {"sheng_aliases": {"$elemMatch": {"$regex": f"^{term}$", "$options": "i"}}}
+                ]
+            }
+
+            # Find matching products
+            matching_products = await db.products.find(query).to_list(length=None)
+
+            # Check which of these products have prices in the target store
+            for candidate_product in matching_products:
+                candidate_id = str(candidate_product["_id"])
+                # Check if this product has a price in the store
+                price_count = await db.prices.count_documents({
+                    "product_id": candidate_id,
+                    "store_id": store_id
+                })
+                if price_count > 0:
+                    return candidate_product
+
+        return None
+    except Exception as e:
+        logger.error(f"Error finding alternative product: {e}")
+        return None
+
+
 async def get_products_for_shopping_list(db, product_names: List[str]) -> List[Dict[str, Any]]:
     """
     Look up products by name for a shopping list.
@@ -383,12 +442,47 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
                 total_price += price_kes
                 found_products += 1
             else:
-                # Product not available at this store
-                store_items[store_id].append({
-                    "name": product_name,
-                    "price": "N/A",
-                    "offer": False
-                })
+                # Product not available at this store, try to find similar alternatives
+                alternative_product = await find_alternative_product_in_store(db, product, store_id)
+                if alternative_product:
+                    # Use the alternative product
+                    alt_price_cursor = db.prices.find({
+                        "product_id": str(alternative_product["_id"]),
+                        "store_id": store_id
+                    }).sort("verified_at", -1).limit(1)
+
+                    alt_price_doc = await alt_price_cursor.to_list(length=1)
+                    if alt_price_doc:
+                        alt_price = alt_price_doc[0]
+                        alt_price_kes = alt_price["price_kes"]
+                        is_promotional = alt_price.get("is_promotional", False)
+
+                        # Format price
+                        price_str = f"{int(alt_price_kes)} KES" if alt_price_kes == int(alt_price_kes) else f"{alt_price_kes:.1f} KES"
+
+                        # Add to store items with indication it's an alternative
+                        store_items[store_id].append({
+                            "name": f"{product_name} ({alternative_product['name']})",
+                            "price": price_str,
+                            "offer": is_promotional
+                        })
+
+                        total_price += alt_price_kes
+                        found_products += 1
+                    else:
+                        # Fallback to N/A if somehow no price found for alternative
+                        store_items[store_id].append({
+                            "name": product_name,
+                            "price": "N/A",
+                            "offer": False
+                        })
+                else:
+                    # No similar product found in this store
+                    store_items[store_id].append({
+                        "name": product_name,
+                        "price": "N/A",
+                        "offer": False
+                    })
 
         # Only include stores where we found at least one product
         if found_products > 0:
