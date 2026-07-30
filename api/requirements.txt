@@ -4,7 +4,6 @@ uvicorn
 requests
 python-dotenv
 Pillow==10.4.0
-jinja2
 
 #INTELLIGENCE REQUIREMENTS
 motor
@@ -17,3 +16,4 @@ scipy
 fuzzywuzzy
 python-Levenshtein
 jellyfish
+jinja2
