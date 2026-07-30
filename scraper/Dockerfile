@@ -6,19 +6,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory in the container
-WORKDIR /app/scraper
+# Set the working directory in the container to the project root
+WORKDIR /app
 
-# Copy scrapy project configuration
-COPY scrapy.cfg /app/scraper/scrapy.cfg
-
-# Copy the scraper app code
-COPY scraper /app/scraper
-
-# Copy the shared database package (needed for pipelines)
-COPY database /app/scraper/database
-
-# Install Python dependencies
+# Copy the scraper requirements and install dependencies
 COPY scraper/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -31,7 +22,7 @@ ENV SCRAPER_LOG_LEVEL=info
 ENV SCRAPER_CONCURRENT_REQUESTS=16
 ENV SCRAPER_DOWNLOAD_DELAY=1
 ENV ENABLE_SCRAPER=true
-ENV SCRAPY_SETTINGS_MODULE=settings
+ENV SCRAPY_SETTINGS_MODULE=scraper.settings
 
 # Set the default command to run the worker script
-CMD ["python", "worker.py", "--mode", "scheduled"]
+CMD ["python", "scraper/worker.py", "--mode", "scheduled"]
