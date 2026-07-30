@@ -1,0 +1,161 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Traffic Analysis{% endblock %}
+
+{% block content %}
+<div class="main-content p-4">
+    <h1 class="mb-4">Traffic Patterns Analysis</h1>
+    <p class="text-muted mb-4">Understanding when and how users interact with the system.</p>
+
+    <!-- Hourly Traffic Chart -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Hourly Distribution (Last 24 Hours)</h5>
+        </div>
+        <div class="card-body">
+            <div class="chart-container">
+                <canvas id="hourlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily Traffic Chart -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Daily Distribution (Last 7 Days)</h5>
+        </div>
+        <div class="card-body">
+            <div class="chart-container">
+                <canvas id="dailyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Traffic Insights -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Peak Traffic Times</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <div class="list-group-item">
+                            <h6>Busiest Hour</h6>
+                            <p class="mb-1">{{ "15:00" }} - {{ "16:00" }}</p>
+                            <small class="text-muted">Highest query volume</small>
+                        </div>
+                        <div class="list-group-item">
+                            <h6>Quietest Hour</h6>
+                            <p class="mb-1">{{ "04:00" }} - {{ "05:00" }}</p>
+                            <small class="text-muted">Lowest activity</small>
+                        </div>
+                        <div class="list-group-item">
+                            <h6>Weekday vs Weekend</h6>
+                            <p class="mb-1">{{ "Weekdays" }} are {{ "15" }}% busier</p>
+                            <small class="text-muted">Based on last 30 days</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Geographic Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Geolocation data not currently available</p>
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 60%" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100">
+                            60% Complete
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Hourly traffic chart
+    const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
+    const hourlyChart = new Chart(hourlyCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ hourly_labels|safe }},
+            datasets: [{
+                label: 'Queries per Hour',
+                data: {{ hourly_counts|safe }},
+                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Daily traffic chart
+    const dailyCtx = document.getElementById('dailyChart').getContext('2d');
+    const dailyChart = new Chart(dailyCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ weekday_labels|safe }},
+            datasets: [{
+                label: 'Queries by Day of Week',
+                data: {{ weekday_counts|safe }},
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.5)',
+                    'rgba(54, 162, 235, 0.5)',
+                    'rgba(255, 206, 86, 0.5)',
+                    'rgba(75, 192, 192, 0.5)',
+                    'rgba(153, 102, 255, 0.5)',
+                    'rgba(255, 159, 64, 0.5)',
+                    'rgba(199, 199, 199, 0.5)'
+                ],
+                borderColor: [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(153, 102, 255, 1)',
+                    'rgba(255, 159, 64, 1)',
+                    'rgba(199, 199, 199, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

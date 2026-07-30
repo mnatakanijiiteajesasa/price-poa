@@ -1,0 +1,152 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="main-content p-4">
+    <h1 class="mb-4">PricePoa Admin Dashboard</h1>
+    <p class="text-muted mb-4">Overview of system performance and user activity.</p>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Total Queries</h5>
+                    <h2 class="display-5 text-primary">{{ total_queries }}</h2>
+                    <p class="text-muted">All-time search volume</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Today's Queries</h5>
+                    <h2 class="display-5 text-success">{{ today_queries }}</h2>
+                    <p class="text-muted">Last 24 hours</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Active Users Today</h5>
+                    <h2 class="display-5 text-info">{{ today_unique_users }}</h2>
+                    <p class="text-muted">Unique users</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Total Users</h5>
+                    <h2 class="display-5 text-warning">{{ total_users }}</h2>
+                    <p class="text-muted">Registered users</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Search Queries</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for query in recent_queries %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ query.text }}</h6>
+                                <small class="text-muted">{{ query.timestamp }}</small>
+                            </div>
+                            <p class="mb-1">User ID: {{ query.user_id }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">System Status</h5>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="statusAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingOne">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
+                                    Database Connection
+                                </button>
+                            </h2>
+                            <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne" data-bs-parent="#statusAccordion">
+                                <div class="accordion-body">
+                                    <span class="badge bg-success">Connected</span>
+                                    <small class="text-muted ms-2">Last checked just now</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingTwo">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                                    ML Models
+                                </button>
+                            </h2>
+                            <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#statusAccordion">
+                                <div class="accordion-body">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Anomaly Detection</span>
+                                        <span class="badge bg-success">Active</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Recommendations</span>
+                                        <span class="badge bg-success">Active</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Correlation Tracking</span>
+                                        <span class="badge bg-warning">Warning</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Trend Analysis</span>
+                                        <span class="badge bg-success">Active</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="mt-4">
+        <h5>Quick Links</h5>
+        <div class="row">
+            <div class="col-md-3">
+                <a href="{{ url_for('admin.trends') }}" class="btn btn-outline-primary w-100">
+                    <i class="fas fa-chart-line me-2"></i>View Trends
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="{{ url_for('admin.popular') }}" class="btn btn-outline-success w-100">
+                    <i class="fas fa-fire me-2"></i>Popular Items
+                </a>
+            </div>
+            <div class="col-md-3">
+                <a href="{{ url_for('admin.traffic') }}" class="btn btn-outline-info w-100">
+                    <i class="fas fa-chart-bar me-2"></i>Traffic Patterns
+                </a>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-outline-secondary w-100" onclick="location.reload()">
+                    <i class="fas fa-sync-alt me-2"></i>Refresh Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -12,6 +12,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from telegram_webhook import router as telegram_router
 from telegram_bot import set_telegram_webhook
 
+# ✓ NEW: Import admin routes
+from admin import admin_router
+
 # Logging
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
@@ -24,6 +27,9 @@ app = FastAPI(
 
 # ✓ NEW: Include Telegram webhook routes
 app.include_router(telegram_router)
+
+# ✓ NEW: Include admin routes
+app.include_router(admin_router)
 
 
 @app.on_event("startup")

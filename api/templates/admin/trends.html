@@ -1,0 +1,120 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Trends Analysis{% endblock %}
+
+{% block content %}
+<div class="main-content p-4">
+    <h1 class="mb-4">Query Trends Analysis</h1>
+    <p class="text-muted mb-4">Analyzing search patterns over time to understand user behavior and seasonal trends.</p>
+
+    <!-- Daily Query Chart -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Daily Query Volume (Last 30 Days)</h5>
+        </div>
+        <div class="card-body">
+            <div class="chart-container">
+                <canvas id="dailyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trends Summary -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Trending Searches</h5>
+                </div>
+                <div class="card-body">
+                    {% if trend_data and trend_data.trending %}
+                    <ul class="list-group list-group-flush">
+                        {% for trend in trend_data.trending[:10] %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ trend.term }}
+                            <span class="badge bg-primary rounded-pill">{{ trend.growth }}%</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-center text-muted">No trend data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Seasonal Patterns</h5>
+                </div>
+                <div class="card-body">
+                    {% if trend_data and trend_data.seasonal %}
+                    <div class="accordion" id="seasonalAccordion">
+                        {% for pattern in trend_data.seasonal %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="heading{{ loop.index }}">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="false" aria-controls="collapse{{ loop.index }}">
+                                    {{ pattern.period }}
+                                </button>
+                            </h2>
+                            <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#seasonalAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>Trend:</strong> {{ pattern.trend }}</p>
+                                    <p><strong>Confidence:</strong> {{ pattern.confidence }}%</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted">No seasonal data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <div class="text-center mt-4">
+        <button class="btn btn-primary" onclick="location.reload()">
+            <i class="fas fa-sync-alt me-2"></i>Refresh Data
+        </button>
+    </div>
+</div>
+
+<script>
+    // Chart.js for daily query volume
+    const ctx = document.getElementById('dailyChart').getContext('2d');
+    const dailyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ daily_labels|safe }},
+            datasets: [{
+                label: 'Daily Queries',
+                data: {{ daily_data|safe }},
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

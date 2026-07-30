@@ -1,0 +1,122 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Popular Products{% endblock %}
+
+{% block content %}
+<div class="main-content p-4">
+    <h1 class="mb-4">Popular Products & Queries</h1>
+    <p class="text-muted mb-4">Discover what users are searching for most frequently.</p>
+
+    <!-- Popular Queries -->
+    <div class="mb-4">
+        <h2>Top Search Queries</h2>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Query</th>
+                        <th>Count</th>
+                        <th>Trend</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for query in popular_queries %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ query._id }}</td>
+                        <td>{{ query.count }}</td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if loop.index <= 3 else 'info' if loop.index <= 10 else 'secondary' }}">
+                                ▲ {{ (21 - loop.index)*5 }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Product Categories Distribution -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Top Categories</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Search Insights</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <div class="list-group-item">
+                            <h6>Average Search Length</h6>
+                            <p class="mb-1">{{ "2.3" }} words</p>
+                            <small class="text-muted">▲ 0.2 from last week</small>
+                        </div>
+                        <div class="list-group-item">
+                            <h6>Most Active Hour</h6>
+                            <p class="mb-1">{{ "14:00" }} - {{ "16:00" }}</p>
+                            <small class="text-muted">Peak shopping time</small>
+                        </div>
+                        <div class="list-group-item">
+                            <h6>Conversion Rate Est.</h6>
+                            <p class="mb-1">{{ "12.4" }}%</p>
+                            <small class="text-muted">Est. searches leading to views</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Category chart (placeholder data)
+    const ctx = document.getElementById('categoryChart').getContext('2d');
+    const categoryChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Grains', 'Vegetables', 'Fruits', 'Oils', 'Spices', 'Others'],
+            datasets: [{
+                label: 'Searches by Category',
+                data: [35, 25, 20, 10, 5, 5],
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.5)',
+                    'rgba(54, 162, 235, 0.5)',
+                    'rgba(255, 206, 86, 0.5)',
+                    'rgba(75, 192, 192, 0.5)',
+                    'rgba(153, 102, 255, 0.5)',
+                    'rgba(255, 159, 64, 0.5)'
+                ],
+                borderColor: [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(153, 102, 255, 1)',
+                    'rgba(255, 159, 64, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

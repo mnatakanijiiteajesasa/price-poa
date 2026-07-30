@@ -10,3 +10,4 @@ __pycache__/*
 venv/
 .pyc
 INTELLIGENCE_LAYER_DETAILS.md
+TAURI_README.md
