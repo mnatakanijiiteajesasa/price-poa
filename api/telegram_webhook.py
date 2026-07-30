@@ -172,6 +172,54 @@ def _is_meaningless_phrase(phrase: str) -> bool:
     return False
 
 
+def extract_meaningful_product_terms(text: str) -> List[str]:
+    """
+    Extract and filter product terms, removing quantities, units, and non-meaningful terms.
+    This helps determine if we have multiple products vs false positives.
+
+    Args:
+        text: The user's message text
+
+    Returns:
+        List of filtered product terms likely to be actual product names
+    """
+    # First extract all potential terms
+    all_terms = extract_product_names_from_shopping_list(text)
+
+    # Filter out terms that look like quantities or units
+    filtered_terms = []
+    import re
+    unit_words = {"kg", "g", "mg", "ml", "l", "ltr", "liter", "litre",
+                  "piece", "pieces", "pc", "pcs", "bottle", "bottles",
+                  "packet", "packets", "pack", "packs", "can", "cans",
+                  "jar", "jars", "tin", "tins", "bag", "bags",
+                  "pouch", "pouches", "box", "boxes", "dozen"}
+
+    for term in all_terms:
+        term_lower = term.lower().strip()
+
+        # Skip if it's just a number
+        if term.isdigit():
+            continue
+
+        # Skip if it looks like a quantity (number + unit)
+        # e.g., "2kg", "1.5l", "500g"
+        if re.match(r'^\d+(\.\d+)?\s*(kg|g|mg|ml|l|ltr|liter|litre|piece|pieces|pc|pcs|bottle|bottles|packet|packets|pack|packs|can|cans|jar|jars|tin|tins|bag|bags|pouch|pouches|box|boxes|dozen)\s*$', term_lower):
+            continue
+
+        # Skip if it's just a unit
+        if term_lower in unit_words:
+            continue
+
+        # Skip if it's too short (likely not a meaningful product name)
+        if len(term_lower) < 3:
+            continue
+
+        filtered_terms.append(term)
+
+    return filtered_terms
+
+
 async def get_products_for_shopping_list(db, product_names: List[str]) -> List[Dict[str, Any]]:
     """
     Look up products by name for a shopping list.
@@ -426,11 +474,18 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
             "data": {}
         }
 
-    # Simple heuristic for now
+    # Enhanced logic: Check for shopping keywords OR multiple product terms
     text_lower = text.lower()
     shopping_keywords = ["list", "basket", "shopping", "buy", "get", "shop", "market"]
 
-    if any(keyword in text_lower for keyword in shopping_keywords):
+    # Extract meaningful product terms to detect multiple products
+    meaningful_terms = extract_meaningful_product_terms(text)
+    has_multiple_products = len(meaningful_terms) >= 2
+
+    # Treat as shopping list if we see shopping keywords OR multiple products
+    is_shopping_list = any(keyword in text_lower for keyword in shopping_keywords) or has_multiple_products
+
+    if is_shopping_list:
         # Shopping list - process the request to get real data
         db = await get_database()
 
