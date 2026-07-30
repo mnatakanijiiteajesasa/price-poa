@@ -316,12 +316,7 @@ async def get_products_for_shopping_list(db, product_names: List[str]) -> List[D
             # Get prices for this product to determine its cost
             try:
                 # Create a minimal product dict for get_product_prices
-                # Use .get() to avoid KeyError if product_name is missing
-                product_name = match.get("product_name", "")
-                if not product_name:
-                    logger.warning(f"Product match {product_id} missing product_name, skipping")
-                    continue
-                product_for_pricing = {"_id": product_id, "name": product_name}
+                product_for_pricing = {"_id": product_id}
                 prices_data = await get_product_prices(db, product_for_pricing)
 
                 if prices_data and "stores" in prices_data and prices_data["stores"]:
