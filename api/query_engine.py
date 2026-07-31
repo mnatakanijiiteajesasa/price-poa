@@ -8,7 +8,7 @@ infographic generator (see infographic/generator.py).
 import re
 import logging
 import os
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict[str, Any, List, Tuple
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -32,6 +32,7 @@ except ImportError as e:
 try:
     from qdrant_client import QdrantClient
     from qdrant_client.http import models as rest
+    from qdrant_client.http.models import PointStruct
     QDRANT_AVAILABLE = True
 except ImportError:
     QDRANT_AVAILABLE = False
@@ -41,11 +42,14 @@ except ImportError:
 class VectorSearchService:
     """Service for handling vector-based product search using Qdrant."""
 
+    _model = None  # Class-level cache for the sentence transformer model
+
     def __init__(self):
         self.client = None
         self.collection_name = "product_embeddings"
         self.vector_size = 384  # Default for sentence-transformers/all-MiniLM-L6-v2
         self._initialize_client()
+        self._initialize_model()
 
     def _initialize_client(self):
         """Initialize Qdrant client connection."""
@@ -77,6 +81,19 @@ class VectorSearchService:
             logger.warning(f"Failed to initialize Qdrant client: {e}")
             self.client = None
 
+    def _initialize_model(self):
+        """Initialize sentence transformer model for text encoding."""
+        if VectorSearchService._model is not None:
+            return
+
+        try:
+            from sentence_transformers import SentenceTransformer
+            VectorSearchService._model = SentenceTransformer('all-MiniLM-L6-v2')
+            logger.info("Loaded sentence transformer model: all-MiniLM-L6-v2")
+        except Exception as e:
+            logger.warning(f"Failed to load sentence transformer model: {e}")
+            VectorSearchService._model = None
+
     async def search_similar_products(self, query_text: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
         Search for similar products using vector embeddings.
@@ -86,18 +103,39 @@ class VectorSearchService:
             limit: Maximum number of results to return
 
         Returns:
-            List of product matches with scores
+            List of product matches with scores and product IDs
         """
-        if not self.client:
-            logger.warning("Qdrant client not available for vector search")
+        if not self.client or VectorSearchService._model is None:
+            logger.warning("Qdrant client or sentence transformer model not available for vector search")
             return []
 
         try:
-            # In a real implementation, you would convert query_text to vector
-            # using a sentence transformer model. For now, we'll return empty
-            # as the focus is on integrating with rapidfuzz
-            logger.info("Vector search would be performed here with query: %s", query_text)
-            return []
+            # Encode the query text to a vector
+            vector = VectorSearchService._model.encode(query_text).tolist()
+
+            # Search in Qdrant
+            search_result = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=vector,
+                limit=limit,
+                with_payload=True  # We need the payload to get the product ID
+            )
+
+            # Format results
+            results = []
+            for point in search_result:
+                payload = point.payload or {}
+                product_id = payload.get("product_id")
+                if product_id:
+                    results.append({
+                        "product_id": product_id,
+                        "score": point.score,
+                        "payload": payload  # Include full payload for potential future use
+                    })
+
+            logger.info(f"Vector search for '{query_text}' returned {len(results)} results")
+            return results
+
         except Exception as e:
             logger.error(f"Error performing vector search: {e}")
             return []
@@ -255,17 +293,36 @@ async def find_product_hybrid(db, query_text: str, limit: int = 10) -> List[Dict
 
     results = []
 
-    # Get fuzzy matches using rapidfuzz
+    # Get fuzzy matches using rapidfuzz (returns product documents)
     try:
         fuzzy_matches = await _get_fuzzy_matches(db, query_text, limit)
         results.extend(fuzzy_matches)
     except Exception as e:
         logger.warning(f"Fuzzy matching failed: {e}")
 
-    # Get vector matches (placeholder for now)
+    # Get vector matches (returns product IDs and scores)
     try:
         vector_matches = await vector_search_service.search_similar_products(query_text, limit)
-        results.extend(vector_matches)
+        # Fetch product documents for the vector matches
+        for match in vector_matches:
+            product_id = match.get("product_id")
+            if product_id:
+                try:
+                    # Try to handle both string and ObjectId formats
+                    if isinstance(product_id, str) and len(product_id) == 24:
+                        object_id = ObjectId(product_id)
+                    else:
+                        object_id = ObjectId(product_id)  # Let ObjectId handle validation
+
+                    product_doc = await db.products.find_one({"_id": object_id})
+                    if product_doc:
+                        # Add metadata to indicate it's a vector match
+                        product_doc["_match_type"] = "vector"
+                        product_doc["_confidence"] = match.get("score", 0.0)
+                        product_doc["_vector_score"] = match.get("score", 0.0)
+                        results.append(product_doc)
+                except Exception as e:
+                    logger.warning(f"Error fetching product {product_id} from vector match: {e}")
     except Exception as e:
         logger.warning(f"Vector search failed: {e}")
 
@@ -274,12 +331,21 @@ async def find_product_hybrid(db, query_text: str, limit: int = 10) -> List[Dict
         # Remove duplicates by product_id, keeping highest score
         seen_products = {}
         for result in results:
-            pid = result.get("product_id")
-            if pid and (pid not in seen_products or result.get("score", 0) > seen_products[pid].get("score", 0)):
-                seen_products[pid] = result
+            pid = str(result.get("_id"))
+            # Determine score: use _confidence for fuzzy/enhanced, _vector_score for vector, default 0.5
+            score = result.get("_confidence") or result.get("_vector_score") or 0.5
+            if pid and (pid not in seen_products or score > seen_products[pid].get("score", 0)):
+                seen_products[pid] = {
+                    "document": result,
+                    "score": score
+                }
 
         # Sort by score descending
-        results = sorted(seen_products.values(), key=lambda x: x.get("score", 0), reverse=True)
+        results = sorted(
+            [v["document"] for v in seen_products.values()],
+            key=lambda x: x.get("_confidence") or x.get("_vector_score") or 0.5,
+            reverse=True
+        )
         return results[:limit]
 
     return []
@@ -295,7 +361,7 @@ async def _get_fuzzy_matches(db, query_text: str, limit: int) -> List[Dict[str, 
         limit: Maximum number of results
 
     Returns:
-        List of fuzzy matches
+        List of fuzzy matches (product documents)
     """
     try:
         # Get all product names and aliases for matching
@@ -377,7 +443,6 @@ async def _get_fuzzy_matches(db, query_text: str, limit: int) -> List[Dict[str, 
                                 product_doc["_match_type"] = product_info["match_type"]
                                 product_doc["_confidence"] = score / 100.0
                                 product_doc["_matched_term"] = match_term
-                                product_doc["_score"] = score / 100.0
                                 results.append(product_doc)
 
             return results[:limit]
