@@ -151,7 +151,8 @@ services:
 networks:
   pricepoa_network:
     driver: bridge
-
+    driver_opts:
+      com.docker.network.driver.mtu: 1472
 volumes:
   mongo_data:
     driver: local
