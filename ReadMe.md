@@ -8,7 +8,7 @@ Kenya's location-aware grocery price comparison tool. This repository contains t
 
 ## 1. Project Architecture
 
-The system is split into four primary microservices managed via Docker Compose:
+The system is split into six primary microservices managed via Docker Compose:
 
 | Service | Container Name | Technology | Internal Port | External Port | Purpose |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -16,6 +16,8 @@ The system is split into four primary microservices managed via Docker Compose:
 | **mongo-express** | `pricepoa_mongo_express` | Node.js / Admin UI | `8081` | `8081` | Visual web interface for database management (Dev only). |
 | **api** | `pricepoa_api` | FastAPI (Python 3.12) | `8000` | `8000` | Webhook endpoints for Telegram/WhatsApp and core API. |
 | **scraper** | `pricepoa_scraper` | Scrapy / Playwright | - | - | Scheduled crawler and background worker. |
+| **intelligence** | `pricepoa_intelligence` | Python 3.12 | - | - | NLP and machine learning services for product matching, recommendations, and analytics. |
+| **qdrant** | `pricepoa_qdrant` | Qdrant Vector Database | `6333` | `6333` | Vector database for storing and searching product embeddings for semantic search. |
 
 ---
 
@@ -24,6 +26,7 @@ The system is split into four primary microservices managed via Docker Compose:
 Follow these steps to initialize and start the environment.
 
 ### Prerequisites
+
 Ensure you have Docker and Docker Compose installed:
 ```bash
 docker --version
@@ -31,22 +34,25 @@ docker compose version
 ```
 
 ### Step 1: Configure Environment Variables
+
 Copy the template `.env.example` file and customize the variables if needed:
 ```bash
 cp .env.example .env
 ```
 
 ### Step 2: Build & Start Core Services
-Build the API and Scraper images (including downloading Playwright stealth web binaries), and start the database and backend:
+
+Build the API and Scraper images (including downloading Playwright stealth web binaries), and start the database, backend, intelligence, and vector database:
 ```bash
 # Build the containers
 sudo docker compose build
 
-# Start the database, API, and background scraper daemon in the background
+# Start all services (including qdrant and intelligence) in the background
 sudo docker compose up -d
 ```
 
 ### Step 3: Start the Visual Database UI
+
 The **Mongo Express** admin interface is configured under the `dev` profile. Spin it up by running:
 ```bash
 sudo docker compose --profile dev up -d mongo-express
@@ -61,6 +67,7 @@ Once started, you can access the visual database dashboard at:
 The scraper can run in two modes:
 
 ### Mode A: Scheduled Daemon Mode (Default)
+
 When you run `sudo docker compose up -d`, the `scraper` container runs in the background in **scheduled mode** (via `worker.py --mode schedule`). 
 * It automatically reads configurations and schedules daily full crawls for each spider using `APScheduler`.
 * Spiders execute in the background according to their configured cron rules.
@@ -71,21 +78,27 @@ sudo docker compose logs -f scraper
 ```
 
 ### Mode B: Manual One-Shot Mode (Crawl Now)
+
 To trigger an immediate scraping run of all active spiders and bypass the scheduler:
 ```bash
 sudo docker compose run --rm scraper python worker.py --mode once
 ```
-### manually triggering one scraper i.e the bar spider
+### Manually triggering one scraper (e.g., the bar spider)
+```bash
 docker compose run --rm scraper python scraper/worker.py --mode once --spider thebar_spider
+```
 
-### scaper diagnostic too
+### Scraper diagnostic tool
+```bash
 docker compose run --rm scraper python inspect_selectors.py https://ke.thebar.com/collections/party
- 
+```
+
 ## 4. Viewing Database Contents
 
 There are three ways to view and query your scraped price data:
 
 ### Method 1: Web Admin Interface (Visual)
+
 Open your browser and navigate to **[http://localhost:8081](http://localhost:8081)**. Click on the `pricepoa` database to browse collections:
 * `scrape_targets`: Active target URLs and custom scraper overrides.
 * `products`: Matches canonical products.
@@ -93,6 +106,7 @@ Open your browser and navigate to **[http://localhost:8081](http://localhost:808
 * `stores`: Registered store chains and branches.
 
 ### Method 2: Connection via CLI (`mongosh`)
+
 Run the MongoDB shell directly inside the database container:
 ```bash
 sudo docker compose exec mongo mongosh -u pricepoa_dev -p pricepoa_dev_password --authenticationDatabase admin pricepoa
@@ -113,6 +127,7 @@ exit
 ```
 
 ### Method 3: Quick Terminal Summary (One-Liner)
+
 Run a quick Python diagnostic script inside the container to print database statistics:
 ```bash
 sudo docker compose run --rm scraper python -c "
@@ -136,16 +151,19 @@ asyncio.run(check())
 The API handles incoming messages from messaging channels like Telegram.
 
 ### Health Status
+
 To check if the backend is successfully connected to the database and online:
 ```bash
 curl http://localhost:8000/health
 ```
 
 ### Interactive API Documentation (Swagger)
+
 FastAPI automatically generates interactive documentation. You can view all endpoint structures and send test payloads via:  
 👉 **[http://localhost:8000/docs](http://localhost:8000/docs)**
 
 ### Inspecting API Logs
+
 To monitor incoming webhook requests, message parsing updates, and infographics generation output:
 ```bash
 sudo docker compose logs -f api
@@ -155,10 +173,14 @@ sudo docker compose logs -f api
 
 ## 6. Intelligence Layer (NLP Capabilities)
 
-**Phase 4 of the project introduced the intelligence engine, which provides advanced analytics capabilities.** Note that the natural language processing (NLP) parser for extracting product names and locations from free-form user messages has been implemented and is now integrated into the Telegram webhook for fuzzy product matching.
+**Phase 4 of the project introduced the intelligence engine, which provides advanced analytics capabilities.** The natural language processing (NLP) parser for extracting product names and locations from free-form user messages has been implemented and is now integrated into the Telegram webhook for fuzzy product matching.
+
+### Key Components
 
 The intelligence engine includes the following components:
 
+- **Enhanced Fuzzy Matching**: Uses **RapidFuzz** (a fast, performance-focused replacement for FuzzyWuzzy) for typo-tolerant product name matching, phonetic algorithms (Soundex/Metaphone), and Swahili/Sheng alias support.
+- **Vector Semantic Search**: Integrated with **Qdrant** vector database to store and search product embeddings generated by **sentence-transformers** (e.g., all-MiniLM-L6-v2) for semantic product search.
 - **Anomaly Detection**: Isolation Forest model to detect unusual price spikes or drops.
 - **Product Recommendations**: Cosine similarity‑based recommender to suggest substitutes or complementary products.
 - **Price Correlation Tracking**: Pearson correlation analysis to identify leader‑follower relationships between products across stores.
@@ -204,3 +226,12 @@ The intelligence components are initialized and maintained via the `initialize_i
 ### 5. `NotImplementedError: Database objects do not implement truth value testing`
 * **Cause**: PyMongo 4+ raises an error when comparing databases or collections in boolean contexts (`if not self.db`).
 * **Resolution**: Use explicit `None` checks (`if self.db is None`) instead.
+
+### 6. Qdrant Connection Issues
+* **Symptoms**: Logs show "Failed to initialize Qdrant client" or vector search fallback to fuzzy matching.
+* **Resolution**:
+  1. Verify the `qdrant` service is running: `docker compose ps qdrant`
+  2. Check Qdrant logs: `docker compose logs qdrant`
+  3. Ensure the `.env` file contains `QDRANT_HOST=qdrant` and `QDRANT_PORT=6333`
+  4. Verify network connectivity: `docker compose exec api ping -c 3 qdrant`
+  5. If using custom hosts/ports, update the environment variables accordingly.

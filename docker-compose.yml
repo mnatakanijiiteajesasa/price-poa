@@ -64,6 +64,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+      # Qdrant Vector Database
+      QDRANT_HOST: ${QDRANT_HOST}
+      QDRANT_PORT: ${QDRANT_PORT}
 
     ports:
       - "8000:8000"
@@ -122,6 +125,8 @@ services:
       MONGODB_URI: ${MONGO_URI}
       MONGODB_DB: ${MONGODB_DB}
       INTELLIGENCE_LOG_LEVEL: ${INTELLIGENCE_LOG_LEVEL:-info}
+      QDRANT_HOST: ${QDRANT_HOST}
+      QDRANT_PORT: ${QDRANT_PORT}
     networks:
       - pricepoa_network
     depends_on:
@@ -132,6 +137,17 @@ services:
       - ./database:/app/database
       - /app/__pycache__
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: pricepoa_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - pricepoa_network
+
 networks:
   pricepoa_network:
     driver: bridge
@@ -140,4 +156,6 @@ volumes:
   mongo_data:
     driver: local
   mongo_config:
+    driver: local
+  qdrant_storage:
     driver: local

@@ -7,4 +7,5 @@ pandas
 scipy
 rapidfuzz
 python-Levenshtein
-qixdrant-client
+qdrant-client
+sentence-transformers
