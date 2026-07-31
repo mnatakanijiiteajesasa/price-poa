@@ -14,33 +14,41 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger("uvicorn.error")
 
-
-def _build_product_match_query(query_text: str) -> dict:
-    """
-    Case-insensitive EXACT match (not substring) against product name,
-    swahili_aliases, or sheng_aliases. Anchored so 'tea' doesn't also
-    match 'tea leaves' via partial overlap - once the NLP parser exists
-    it should pass the cleaned entity text in here, not raw free text.
-    """
-    escaped = re.escape(query_text.strip())
-    pattern = f"^{escaped}$"
-    return {
-        "$or": [
-            {"name": {"$regex": pattern, "$options": "i"}},
-            {"swahili_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
-            {"sheng_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
-        ]
-    }
+# Import enhanced product matcher for fuzzy matching
+try:
+    from intelligence.nlp.product_matcher import find_product_enhanced
+except ImportError:
+    # Fallback for when intelligence module is not available
+    def find_product_enhanced(db, query_text):
+        """Fallback function if product_matcher is not available"""
+        return None
 
 
 async def find_product(db, query_text: str) -> Optional[dict]:
     """
     Find a single product document matching the given text against its
-    name or aliases. Returns None if nothing matches.
+    name or aliases using enhanced fuzzy matching (exact match first,
+    then fuzzy matching for typos and aliases).
+    Returns None if nothing matches.
     """
-    query = _build_product_match_query(query_text)
-    product = await db.products.find_one(query)
-    return product
+    try:
+        # Use the enhanced product matcher which includes fuzzy matching
+        product = await find_product_enhanced(db, query_text)
+        return product
+    except Exception as e:
+        logger.warning(f"Enhanced product matching failed, falling back to exact match: {e}")
+        # Fallback to original exact matching if enhanced matching fails
+        escaped = re.escape(query_text.strip())
+        pattern = f"^{escaped}$"
+        query = {
+            "$or": [
+                {"name": {"$regex": pattern, "$options": "i"}},
+                {"swahili_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
+                {"sheng_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
+            ]
+        }
+        product = await db.products.find_one(query)
+        return product
 
 
 async def get_product_prices(

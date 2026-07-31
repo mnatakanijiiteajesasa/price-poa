@@ -13,7 +13,8 @@ scikit-learn
 numpy
 pandas
 scipy
-fuzzywuzzy
+rapidfuzz
 python-Levenshtein
 jellyfish
 jinja2
+qixdrant-client
