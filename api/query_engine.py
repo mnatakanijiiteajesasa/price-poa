@@ -470,5 +470,76 @@ async def _get_fuzzy_matches(db, query_text: str, limit: int) -> List[Dict[str, 
     return []
 
 
+async def find_product_matches(db, query_text: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Find up to `limit` distinct products matching a query, each with its
+    cheapest current price attached. Used for single-product queries where
+    multiple product types/brands could satisfy the search (e.g. "milk"
+    -> several brands/variants) so the user can compare and confirm.
+    """
+    if not query_text or not query_text.strip():
+        return []
+
+    candidates: List[Dict[str, Any]] = []
+    seen_ids = set()
+
+    # Exact match first, always included if found
+    try:
+        escaped = re.escape(query_text.strip())
+        pattern = f"^{escaped}$"
+        exact = await db.products.find_one({
+            "$or": [
+                {"name": {"$regex": pattern, "$options": "i"}},
+                {"swahili_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
+                {"sheng_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
+            ]
+        })
+        if exact:
+            candidates.append(exact)
+            seen_ids.add(str(exact["_id"]))
+    except Exception as e:
+        logger.warning(f"Exact matching failed: {e}")
+
+    # Fill remaining slots with hybrid (fuzzy + vector) candidates
+    try:
+        hybrid_matches = await find_product_hybrid(db, query_text, limit=limit * 2)
+        for m in hybrid_matches:
+            pid = str(m.get("_id"))
+            if pid and pid not in seen_ids:
+                candidates.append(m)
+                seen_ids.add(pid)
+            if len(candidates) >= limit:
+                break
+    except Exception as e:
+        logger.warning(f"Hybrid matching failed: {e}")
+
+    # Attach cheapest price for each candidate; drop ones with no pricing at all
+    results = []
+    for product in candidates[:limit]:
+        prices_data = await get_product_prices(db, product)
+        if prices_data and prices_data.get("stores"):
+            cheapest_store = prices_data["stores"][0]  # already sorted cheapest-first
+            results.append({
+                "product_id": str(product["_id"]),
+                "name": product.get("name", "Unknown"),
+                "price_label": cheapest_store["price"],
+                "price_value": parse_price_value(cheapest_store["price"]),
+                "store_name": cheapest_store["name"],
+                "offer": cheapest_store["offer"],
+            })
+
+    results.sort(key=lambda x: x["price_value"])
+    return results
+
+
+def parse_price_value(price_str: str) -> float:
+    """Extract a float from strings like '479 KES' for sorting purposes."""
+    cleaned = ''.join(c for c in str(price_str) if c.isdigit() or c == '.')
+    try:
+        return float(cleaned) if cleaned else 0.0
+    except ValueError:
+        return 0.0
+
+
 # Backward compatibility alias
 find_product_fuzzy = find_product

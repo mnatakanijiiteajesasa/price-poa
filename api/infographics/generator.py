@@ -432,3 +432,45 @@ def generate_shopping_list_image(data: dict) -> bytes:
     draw_footer(img, draw, footer_top, canvas_height, "Prices verified by PricePoa")
 
     return _finalize_image(img, "shopping_list")
+
+
+def generate_product_options_image(data: dict) -> bytes:
+    """
+    data keys: query_text, options (list of {name, price_label, price_value,
+    store_name, offer}), date
+    """
+    query_text = data.get("query_text", "")
+    date_str = data.get("date", datetime.now().strftime("%Y-%m-%d"))
+    options = data.get("options", [])
+
+    subtitle = f"Verified {date_str}"
+    title = f'Results for "{query_text}"'
+
+    max_value = max((o["price_value"] for o in options), default=1) or 1
+
+    content_width = IMG_WIDTH - 2 * PADDING
+    rows_height = len(options) * (92 + 14) if options else 40
+    header_height_estimate = 150
+    footer_height = 64
+    canvas_height = header_height_estimate + 30 + rows_height + footer_height + PADDING
+
+    img = Image.new('RGB', (IMG_WIDTH, canvas_height), color=CANVAS_BG)
+    draw = ImageDraw.Draw(img)
+
+    y = draw_header(img, draw, "PRODUCT OPTIONS", title, subtitle)
+    y += 22
+
+    if options:
+        y = draw_section_title(draw, y, "Compare & Choose")
+        for rank, opt in enumerate(options):
+            label = f"{opt['name']} \u2022 {opt['store_name']}"
+            y = draw_ranked_row(draw, y, content_width, label, opt["price_label"],
+                                opt["price_value"], max_value, rank, is_offer=opt["offer"])
+    else:
+        draw.text((PADDING, y), "No matching products found.", fill=TEXT_MUTED, font=get_font(FONT_SIZE_BODY))
+        y += FONT_SIZE_BODY + 20
+
+    footer_top = canvas_height - footer_height
+    draw_footer(img, draw, footer_top, canvas_height, "Prices verified by PricePoa")
+
+    return _finalize_image(img, "product_options")

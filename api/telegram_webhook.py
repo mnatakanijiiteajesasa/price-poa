@@ -14,8 +14,9 @@ from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegr
 from infographics.generator import (
     generate_single_product_image,
     generate_shopping_list_image,
+    generate_product_options_image,
 )
-from query_engine import get_product_prices
+from query_engine import get_product_prices, find_product_matches
 from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_fuzzy
 from api.query_engine import find_product
@@ -632,28 +633,23 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
                 }
             }
     else:
-        # Single product - use enhanced matching (exact + fuzzy + aliases + vector search) to find product.
-        # NOTE: This replaces the old exact-only lookup with NLP-powered matching enhanced with vector search.
+        # Single product query - return multiple options for comparison
         db = await get_database()
-        product = await find_product(db, text)
-        if product is None:
-            return {
-                "type": "not_found",
-                "data": {"query_text": text},
-            }
+        matches = await find_product_matches(db, text, limit=5)
 
-        # Get product prices (same as before)
-        result = await get_product_prices(db, product)
-
-        if result is None:
+        if not matches:
             return {
                 "type": "not_found",
                 "data": {"query_text": text},
             }
 
         return {
-            "type": "single_product",
-            "data": result,
+            "type": "product_options",
+            "data": {
+                "query_text": text,
+                "options": matches,
+                "date": datetime.now().strftime("%Y-%m-%d"),
+            },
         }
 
 
@@ -756,6 +752,11 @@ async def telegram_webhook(
                 image_bytes = generate_shopping_list_image(processed["data"])
             else:
                 logger.error("Missing 'data' key in processed for shopping_list")
+        elif processed["type"] == "product_options":
+            if "data" in processed:
+                image_bytes = generate_product_options_image(processed["data"])
+            else:
+                logger.error("Missing 'data' key in processed for product_options")
     except Exception as e:
         logger.error(f"Error generating image: {e}")
         image_bytes = None
@@ -781,7 +782,7 @@ async def telegram_webhook(
                     text_lines[-1] += " (Offer!)"
         text_lines.append(f"Date: {data.get('date', 'N/A')}")
         fallback_text = "\n".join(text_lines)
-    else:  # shopping list
+    elif processed["type"] == "shopping_list":
         data = processed["data"]
         lines = [f"Shopping List Comparison:"]
         stores = data.get("stores", [])
@@ -797,6 +798,16 @@ async def telegram_webhook(
         if data.get("item_count"):
             lines.append(f"Items: {data['item_count']}")
         fallback_text = "\n".join(lines)
+    else:  # product_options
+        data = processed["data"]
+        text_lines = [f'Results for "{data.get("query_text", "")}":']
+        for opt in data.get("options", []):
+            line = f"  {opt['name']} ({opt['store_name']}): {opt['price_label']}"
+            if opt.get('offer'):
+                line += " (Offer!)"
+            text_lines.append(line)
+        text_lines.append(f"Date: {data.get('date', 'N/A')}")
+        fallback_text = "\n".join(text_lines)
 
     # Send the fallback text
     success = send_telegram_text(chat_id, fallback_text)
