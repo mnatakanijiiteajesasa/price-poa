@@ -233,3 +233,8 @@ async def index_product_embeddings():
     """
     indexer = ProductEmbeddingIndexer()
     return await indexer.index_products()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(index_product_embeddings())
