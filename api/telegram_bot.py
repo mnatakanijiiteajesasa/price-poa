@@ -9,6 +9,8 @@ Replaces whatsapp_meta.py from the Meta WhatsApp integration.
 import os
 import logging
 import requests
+import time
+
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -48,20 +50,27 @@ def send_telegram_text(chat_id: int, text: str) -> bool:
         return False
 
 
-def send_telegram_photo(chat_id: int, image_bytes: bytes, caption: str = None) -> bool:
-    """Send a photo (e.g. generated infographic) to a chat."""
+def send_telegram_photo(chat_id: int, image_bytes: bytes, caption: str = None, max_attempts: int = 3) -> bool:
+    """Send a photo (e.g. generated infographic) to a chat.
+    Retries on transient network errors (packet loss, connection reset) before
+    giving up and letting the caller fall back to a text message."""
     url = f"{TELEGRAM_API_BASE}/sendPhoto"
     files = {"photo": ("infographic.png", image_bytes, "image/png")}
     data = {"chat_id": chat_id}
     if caption:
         data["caption"] = caption
-    try:
-        resp = requests.post(url, data=data, files=files, timeout=15)
-        resp.raise_for_status()
-        return True
-    except requests.RequestException as e:
-        logger.error(f"Failed to send Telegram photo: {e}")
-        return False
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.post(url, data=data, files=files, timeout=30)
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            logger.warning(f"Telegram photo send attempt {attempt}/{max_attempts} failed: {e}")
+            if attempt < max_attempts:
+                time.sleep(1.5 * attempt)  # brief backoff before retry
+
+    logger.error(f"Failed to send Telegram photo after {max_attempts} attempts")
+    return False
 
 
 def set_telegram_webhook(webhook_url: str) -> bool:
