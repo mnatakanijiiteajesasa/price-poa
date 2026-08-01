@@ -18,7 +18,7 @@ from infographics.generator import (
 from query_engine import get_product_prices
 from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_fuzzy
-from api.query_engine import find_product
+from query_engine import find_product
 
 logger = logging.getLogger("uvicorn.error")
 

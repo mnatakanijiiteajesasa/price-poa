@@ -114,12 +114,12 @@ class VectorSearchService:
             vector = VectorSearchService._model.encode(query_text).tolist()
 
             # Search in Qdrant
-            search_result = self.client.search(
+            search_result = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=vector,
+                query=vector,
                 limit=limit,
                 with_payload=True  # We need the payload to get the product ID
-            )
+            ).points
 
             # Format results
             results = []
