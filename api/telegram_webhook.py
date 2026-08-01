@@ -497,9 +497,10 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
                 "items": store_items[store_id],
                 "product_count": found_products
             })
+        
 
-    # Sort stores by total price (ascending)
-    store_totals.sort(key=lambda x: x["total_value"])
+    # Sort stores: most complete basket first, then by total price ascending
+    store_totals.sort(key=lambda x: (-x["product_count"], x["total_value"]))
 
     # Format for the image generator
     stores_for_display = []
@@ -507,7 +508,8 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
         stores_for_display.append({
             "name": store_data["store_name"],
             "total": store_data["total"],
-            "items": store_data["items"]
+            "items": store_data["items"],
+            "product_count": store_data["product_count"],
         })
 
     # Generate recommendation and savings
@@ -515,32 +517,31 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
     savings = ""
 
     if len(stores_for_display) >= 2:
-        cheapest = stores_for_display[0]
-        most_expensive = stores_for_display[-1]
-
-        # Extract numeric values for calculation
         def parse_price(price_str):
             try:
-                # Extract number from string like "410 KES" or "410.5 KES"
                 import re
                 match = re.search(r'[\d,]+\.?\d*', price_str)
-                if match:
-                    return float(match.group().replace(',', ''))
-                return 0
+                return float(match.group().replace(',', '')) if match else 0
             except:
                 return 0
 
-        cheapest_val = parse_price(cheapest["total"])
-        expensive_val = parse_price(most_expensive["total"])
+        best_store = stores_for_display[0]  # completeness+price winner, already correctly ordered
+        highest_priced_store = max(stores_for_display, key=lambda s: parse_price(s["total"]))
 
-        if expensive_val > cheapest_val:
-            savings_amount = expensive_val - cheapest_val
+        best_val = parse_price(best_store["total"])
+        highest_val = parse_price(highest_priced_store["total"])
+
+        if highest_val > best_val:
+            savings_amount = highest_val - best_val
             savings_str = f"{int(savings_amount)} KES" if savings_amount == int(savings_amount) else f"{savings_amount:.1f} KES"
 
-            recommendation = f"{cheapest['name']} - Lowest total"
-            savings = f"Save {savings_str} vs {most_expensive['name']}"
+            recommendation = f"{best_store['name']} - Lowest total ({best_store.get('product_count', '?')}/{len(products)} items found)"
+            savings = f"Save {savings_str} vs {highest_priced_store['name']}"
         else:
-            recommendation = f"All stores have similar pricing"
+            recommendation = f"{best_store['name']} - Best match ({best_store.get('product_count', '?')}/{len(products)} items found)"
+            savings = ""
+
+
     elif len(stores_for_display) == 1:
         recommendation = f"Only {stores_for_display[0]['name']} has pricing data"
     else:
