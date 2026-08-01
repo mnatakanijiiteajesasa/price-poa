@@ -8,3 +8,6 @@ scipy
 rapidfuzz
 python-Levenshtein
 qdrant-client
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+sentence-transformers

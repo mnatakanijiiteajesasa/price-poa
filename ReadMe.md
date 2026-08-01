@@ -191,7 +191,8 @@ These components are orchestrated by the `IntelligenceEngine` class in `intellig
 The intelligence components are initialized and maintained via the `initialize_intelligence` and `run_intelligence_maintenance` functions, which train/update models using recent data from the MongoDB database.
 
 ---
-
+## tirggering product indexer for building qdrant vectors in product_embeddings collection from mongodd products collection
+docker exec -it pricepoa_intelligence python -m index_product_embeddings
 ## 7. Stop and Clean Up Services
 
 * **Stop all containers** (leaves database volumes intact):
