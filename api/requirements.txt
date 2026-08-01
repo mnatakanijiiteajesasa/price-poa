@@ -4,6 +4,8 @@ uvicorn
 requests
 python-dotenv
 Pillow==10.4.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 sentence-transformers
 
 #INTELLIGENCE REQUIREMENTS
@@ -19,4 +21,3 @@ python-Levenshtein
 jellyfish
 jinja2
 qdrant-client
-sentence-transformers

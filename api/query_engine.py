@@ -8,7 +8,7 @@ infographic generator (see infographic/generator.py).
 import re
 import logging
 import os
-from typing import Optional, Dict[str, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -251,7 +251,7 @@ async def get_product_prices(
     latest_verified = max(p["verified_at"] for p in prices)
 
     return {
-        "product_name": product["name"],
+        "product_name": product.get("name", "Unknown Product"),
         "stores": store_entries,
         "date": latest_verified.strftime("%Y-%m-%d"),
     }

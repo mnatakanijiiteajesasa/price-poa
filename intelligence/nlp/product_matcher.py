@@ -251,8 +251,16 @@ class ProductMatcher:
             return None
 
         # First try exact match using existing query engine logic
-        from query_engine import find_product
-        exact_match = await find_product(self.db, query_text)
+        import re
+        escaped = re.escape(query_text.strip())
+        pattern = f"^{escaped}$"
+        exact_match = await self.db.products.find_one({
+            "$or": [
+                {"name": {"$regex": pattern, "$options": "i"}},
+                {"swahili_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
+                {"sheng_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}}
+            ]
+        })
         if exact_match:
             # Add metadata indicating exact match
             exact_match["_match_type"] = "exact"

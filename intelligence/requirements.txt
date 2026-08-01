@@ -8,4 +8,3 @@ scipy
 rapidfuzz
 python-Levenshtein
 qdrant-client
-sentence-transformers
