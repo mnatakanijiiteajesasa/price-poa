@@ -77,6 +77,7 @@ services:
       - ./intelligence:/app/intelligence
       - ./database:/app/database
       - /app/__pycache__
+      - hf_cache:/root/.cache/huggingface
     networks:
       - pricepoa_network
     depends_on:
@@ -140,7 +141,7 @@ services:
       - ./intelligence:/app
       - ./database:/app/database
       - /app/__pycache__
-
+      - hf_cache:/root/.cache/huggingface
   qdrant:
     image: qdrant/qdrant:latest
     container_name: pricepoa_qdrant
@@ -163,4 +164,6 @@ volumes:
   mongo_config:
     driver: local
   qdrant_storage:
+    driver: local
+  hf_cache:              
     driver: local

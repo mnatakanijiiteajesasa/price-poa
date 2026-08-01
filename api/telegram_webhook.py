@@ -19,7 +19,7 @@ from infographics.generator import (
 from query_engine import get_product_prices, find_product_matches
 from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_fuzzy
-from api.query_engine import find_product
+from query_engine import find_product
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -713,8 +713,7 @@ async def telegram_webhook(
             "products": [],  # will fill if we have product IDs
         }
         if processed.get("type") == "single_product":
-            # Look up the product by text again for logging (we already did this in processing, but we need the object for logging)
-            product = await find_product(db, text)
+            product = processed.get("_product")
             if product:
                 query_log["products"] = [str(product["_id"])]
         # For other types, leave products empty
