@@ -11,7 +11,7 @@ fi
 
 # Start the scheduler for periodic tasks
 echo "Starting APScheduler for periodic intelligence tasks..."
-python -m intelligence.scheduler &
+python -m scheduler &
 
 # Keep the container running
 # Run tests or keep alive
