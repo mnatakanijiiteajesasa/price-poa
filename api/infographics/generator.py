@@ -9,17 +9,19 @@ there's no dead space regardless of how many stores are in the result set.
 from io import BytesIO
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+import logging
 
-# ---------------------------------------------------------------------------
+logger = logging.getLogger("uvicorn.error")
+
 # Canvas
-# ---------------------------------------------------------------------------
+
 IMG_WIDTH = 800
 PADDING = 32
 
-# ---------------------------------------------------------------------------
+
 # Palette — poster-y but still on-brand. Header uses a blue gradient,
 # cards sit on a soft off-white canvas (not stark white) for contrast.
-# ---------------------------------------------------------------------------
+
 CANVAS_BG = (245, 247, 250)
 HEADER_TOP = (7, 71, 166)      # deep blue
 HEADER_BOTTOM = (18, 120, 219)  # brighter blue
@@ -76,9 +78,8 @@ def get_font(size, bold=False):
     return font
 
 
-# ---------------------------------------------------------------------------
 # Small drawing helpers
-# ---------------------------------------------------------------------------
+
 
 def text_size(draw, text, font):
     bbox = draw.textbbox((0, 0), text, font=font)
@@ -261,9 +262,22 @@ def draw_footer(img, draw, y_top, canvas_height, note):
     draw.text(((IMG_WIDTH - tw) / 2, canvas_height - th - 10), tagline, fill=TEXT_ON_HEADER_MUTED, font=tagline_font)
 
 
-# ---------------------------------------------------------------------------
+
+
+def _finalize_image(img: Image.Image, label: str) -> bytes:
+    """Encode to PNG with palette reduction + optimization, log final size."""
+    # This content is flat colors/gradients/text — indexed palette mode
+    # loses no visible quality and shrinks file size significantly vs RGB PNG.
+    quantized = img.convert("P", palette=Image.ADAPTIVE, colors=256)
+    img_bytes = BytesIO()
+    quantized.save(img_bytes, format="PNG", optimize=True)
+    result = img_bytes.getvalue()
+    logger.info(f"Generated {label} image: {len(result) / 1024:.1f} KB ({img.width}x{img.height})")
+    return result
+
+
 # Public generators
-# ---------------------------------------------------------------------------
+
 
 def generate_single_product_image(data: dict) -> bytes:
     """
@@ -320,9 +334,8 @@ def generate_single_product_image(data: dict) -> bytes:
     footer_top = canvas_height - footer_height
     draw_footer(img, draw, footer_top, canvas_height, "Prices verified by PricePoa")
 
-    img_bytes = BytesIO()
-    img.save(img_bytes, format='PNG')
-    return img_bytes.getvalue()
+    return _finalize_image(img, "single_product")
+
 
 
 def generate_shopping_list_image(data: dict) -> bytes:
@@ -418,6 +431,4 @@ def generate_shopping_list_image(data: dict) -> bytes:
     footer_top = canvas_height - footer_height
     draw_footer(img, draw, footer_top, canvas_height, "Prices verified by PricePoa")
 
-    img_bytes = BytesIO()
-    img.save(img_bytes, format='PNG')
-    return img_bytes.getvalue()
+    return _finalize_image(img, "shopping_list")

@@ -15,7 +15,7 @@ RUN apt-get update \
 # Copy the requirements file and install dependencies
 COPY api/requirements.txt ./requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --default-timeout=250 --retries 10 -r requirements.txt
+    pip install --default-timeout=250 --retries 30 -r requirements.txt
 
 # Copy the application code and shared folders
 COPY api/ .
