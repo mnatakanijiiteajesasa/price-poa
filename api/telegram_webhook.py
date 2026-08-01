@@ -17,7 +17,8 @@ from infographics.generator import (
 )
 from query_engine import get_product_prices
 from database.connection import get_database
-from intelligence.nlp.product_matcher import find_product_enhanced, find_product_fuzzy
+from intelligence.nlp.product_matcher import find_product_fuzzy
+from api.query_engine import find_product
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -359,7 +360,7 @@ async def get_products_for_shopping_list(db, product_names: List[str]) -> List[D
                 logger.error(f"Error fetching product {best_match['product_id']}: {e}")
         else:
             # Fallback to the original behavior if our new method didn't work
-            product = await find_product_enhanced(db, name.strip())
+            product = await find_product(db, name.strip())
             if product and str(product["_id"]) not in found_names:
                 products.append(product)
                 found_names.add(str(product["_id"]))
@@ -631,10 +632,10 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
                 }
             }
     else:
-        # Single product - use enhanced matching (exact + fuzzy + aliases) to find product.
-        # NOTE: This replaces the old exact-only lookup with NLP-powered matching.
+        # Single product - use enhanced matching (exact + fuzzy + aliases + vector search) to find product.
+        # NOTE: This replaces the old exact-only lookup with NLP-powered matching enhanced with vector search.
         db = await get_database()
-        product = await find_product_enhanced(db, text)
+        product = await find_product(db, text)
         if product is None:
             return {
                 "type": "not_found",
@@ -717,7 +718,7 @@ async def telegram_webhook(
         }
         if processed.get("type") == "single_product":
             # Look up the product by text again for logging (we already did this in processing, but we need the object for logging)
-            product = await find_product_enhanced(db, text)
+            product = await find_product(db, text)
             if product:
                 query_log["products"] = [str(product["_id"])]
         # For other types, leave products empty
