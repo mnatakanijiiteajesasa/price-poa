@@ -716,8 +716,9 @@ async def telegram_webhook(
             product = processed.get("_product")
             if product:
                 query_log["products"] = [str(product["_id"])]
-        # For other types, leave products empty
-        await db.query_logs.insert_one(query_log)
+        elif processed.get("type") == "product_options":
+            options = processed.get("data", {}).get("options", [])
+            query_log["products"] = [opt["product_id"] for opt in options if opt.get("product_id")]
     except Exception as e:
         logger.error(f"Failed to log query: {e}")
 
@@ -741,12 +742,7 @@ async def telegram_webhook(
     # Generate the infographic
     image_bytes = None
     try:
-        if processed["type"] == "single_product":
-            if "data" in processed:
-                image_bytes = generate_single_product_image(processed["data"])
-            else:
-                logger.error("Missing 'data' key in processed for single_product")
-        elif processed["type"] == "shopping_list":
+        if processed["type"] == "shopping_list":
             if "data" in processed:
                 image_bytes = generate_shopping_list_image(processed["data"])
             else:
@@ -769,19 +765,7 @@ async def telegram_webhook(
             logger.warning("Failed to send photo, falling back to text")
 
     # Fallback to text message
-    if processed["type"] == "single_product":
-        data = processed["data"]
-        text_lines = [f"Product: {data.get('product_name', 'N/A')}"]
-        stores = data.get("stores", [])
-        if stores:
-            text_lines.append("Prices per store:")
-            for store in stores:
-                text_lines.append(f"  {store.get('name', 'Unknown')}: {store.get('price', 'N/A')}")
-                if store.get('offer'):
-                    text_lines[-1] += " (Offer!)"
-        text_lines.append(f"Date: {data.get('date', 'N/A')}")
-        fallback_text = "\n".join(text_lines)
-    elif processed["type"] == "shopping_list":
+    if processed["type"] == "shopping_list":
         data = processed["data"]
         lines = [f"Shopping List Comparison:"]
         stores = data.get("stores", [])
