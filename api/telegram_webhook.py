@@ -654,6 +654,7 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
         return {
             "type": "single_product",
             "data": result,
+            "product": product  # Include the product object for logging to avoid double lookups
         }
 
 
@@ -717,8 +718,7 @@ async def telegram_webhook(
             "products": [],  # will fill if we have product IDs
         }
         if processed.get("type") == "single_product":
-            # Look up the product by text again for logging (we already did this in processing, but we need the object for logging)
-            product = await find_product(db, text)
+            product = processed.get("_product")
             if product:
                 query_log["products"] = [str(product["_id"])]
         # For other types, leave products empty
