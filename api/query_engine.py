@@ -172,6 +172,23 @@ async def find_product(db, query_text: str) -> Optional[dict]:
         logger.warning(f"Enhanced product matching failed: {e}")
 
     try:
+        # Enrich with vector search if available
+        vector_products = await find_product_hybrid(db, query_text, limit=5)
+        if vector_products:
+            # Return the best match from hybrid search
+            best_product = vector_products[0]
+            # Ensure we have the metadata fields set properly
+            if "_match_type" not in best_product:
+                best_product["_match_type"] = "hybrid"
+            if "_confidence" not in best_product:
+                # Use vector score or default to 0.8
+                best_product["_confidence"] = best_product.get("_vector_score", 0.8)
+            return best_product
+
+    except Exception as e:
+        logger.warning(f"Hybrid search failed: {e}")
+
+    try:
         # Fallback to original exact matching if enhanced fails
         escaped = re.escape(query_text.strip())
         pattern = f"^{escaped}$"
@@ -190,7 +207,7 @@ async def find_product(db, query_text: str) -> Optional[dict]:
     except Exception as e:
         logger.warning(f"Exact matching failed: {e}")
 
-    # If both fail, return None
+    # If all fail, return None
     return None
 
 
