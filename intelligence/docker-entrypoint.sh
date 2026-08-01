@@ -1,109 +1,25 @@
 #!/bin/bash
 set -e
 
-# Docker entrypoint for the intelligence service
+echo "Intelligence service starting..."
 
-echo "Starting PricePoa Intelligence Service..."
+# Run any initialization scripts if needed
+if [ -f "/app/initialize_intelligence.py" ]; then
+    echo "Running initialization script..."
+    python /app/initialize_intelligence.py
+fi
 
-# Wait for MongoDB to be ready
-echo "Waiting for MongoDB to be ready..."
-until python -c "
-import asyncio
-import sys
-from motor.motor_asyncio import AsyncIOMotorClient
+# Start the scheduler for periodic tasks
+echo "Starting APScheduler for periodic intelligence tasks..."
+python -m intelligence.scheduler &
 
-async def test():
-    try:
-        client = AsyncIOMotorClient('$MONGODB_URI')
-        await client.admin.command('ping')
-        print('MongoDB is ready')
-        sys.exit(0)
-    except Exception as e:
-        print('MongoDB is unavailable:', e)
-        sys.exit(1)
-
-asyncio.run(test())
-"; do
-  echo "MongoDB is unavailable - sleeping"
-  sleep 5
-done
-
-echo "MongoDB is up and running!"
-
-# Run initialization
-echo "Initializing intelligence models..."
-PYTHONPATH=/app python -c "
-import sys
-sys.path.insert(0, '/app')
-print('Python path:', sys.path)
-import asyncio
-import logging
-from intelligence_engine import initialize_intelligence
-from motor.motor_asyncio import AsyncIOMotorClient
-
-async def init():
-    client = AsyncIOMotorClient('$MONGODB_URI')
-    db = client['$MONGODB_DB']
-    try:
-        result = await initialize_intelligence(db)
-        print('Initialization results:', result)
-    except Exception as e:
-        print('Initialization error:', str(e))
-        # Don't fail the container if initialization fails - models will train on first use
-    finally:
-        client.close()
-
-asyncio.run(init())
-"
-
-# Start the background worker for periodic tasks
-echo "Starting intelligence background worker..."
-
-# This would normally run periodic tasks like model retraining, correlation updates, etc.
-# For now, we'll run a simple loop that does periodic maintenance
-PYTHONPATH=/app python -c "
-import sys
-sys.path.insert(0, '/app')
-print('Background worker Python path:', sys.path)
-import asyncio
-import logging
-import time
-from datetime import datetime, timedelta
-from intelligence_engine import intelligence_engine
-from motor.motor_asyncio import AsyncIOMotorClient
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-async def background_worker():
-    client = AsyncIOMotorClient('$MONGODB_URI')
-    db = client['$MONGODB_DB']
-
-    last_maintenance = None
-    maintenance_interval = 6 * 60 * 60  # 6 hours in seconds
-
-    try:
-        while True:
-            now = datetime.utcnow()
-
-            # Run maintenance every 6 hours
-            if last_maintenance is None or (now - last_maintenance).total_seconds() > maintenance_interval:
-                logger.info('Running intelligence maintenance...')
-                try:
-                    result = await intelligence_engine.run_maintenance(db)
-                    logger.info(f'Maintenance completed: {result}')
-                    last_maintenance = now
-                except Exception as e:
-                    logger.error(f'Error during maintenance: {e}')
-
-            # Sleep for 30 minutes before checking again
-            await asyncio.sleep(30 * 60)
-
-    except KeyboardInterrupt:
-        logger.info('Shutting down intelligence worker...')
-    finally:
-        client.close()
-
-if __name__ == '__main__':
-    asyncio.run(background_worker())
-"
+# Keep the container running
+# Run tests or keep alive
+if [ "$1" = "test" ]; then
+    echo "Running tests..."
+    python -m pytest /app/test_imports.py -v
+else
+    echo "Intelligence service is running..."
+    # Keep container alive
+    tail -f /dev/null
+fi
