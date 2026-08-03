@@ -408,25 +408,7 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
             "date": datetime.now().strftime("%Y-%m-%d")
         }
 
-    # Drop products with no pricing data in any store at all
-    priced_products = []
-    for product in products:
-        has_price = await db.prices.count_documents({"product_id": str(product["_id"])}) > 0
-        if has_price:
-            priced_products.append(product)
-        else:
-            logger.info(f"Dropping product with no pricing data anywhere: {product.get('name', 'Unknown')}")
-    products = priced_products
-
-    if not products:
-        return {
-            "stores": [],
-            "recommendation": "No pricing data available for any product in your list",
-            "savings": "",
-            "date": datetime.now().strftime("%Y-%m-%d")
-        }
-
-    # Get all active stores
+    # Get all active stores first
     stores_cursor = db.stores.find({"is_active": True})
     stores = await stores_cursor.to_list(length=None)
 
@@ -434,6 +416,30 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
         return {
             "stores": [],
             "recommendation": "No stores found",
+            "savings": "",
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }
+
+    # Get active store IDs for filtering
+    active_store_ids = [str(store["_id"]) for store in stores]
+
+    # Drop products with no pricing data in any of the active stores
+    priced_products = []
+    for product in products:
+        has_price = await db.prices.count_documents({
+            "product_id": str(product["_id"]),
+            "store_id": {"$in": active_store_ids}
+        }) > 0
+        if has_price:
+            priced_products.append(product)
+        else:
+            logger.info(f"Dropping product with no pricing data in any active store: {product.get('name', 'Unknown')}")
+    products = priced_products
+
+    if not products:
+        return {
+            "stores": [],
+            "recommendation": "No pricing data available for any product in your list",
             "savings": "",
             "date": datetime.now().strftime("%Y-%m-%d")
         }
