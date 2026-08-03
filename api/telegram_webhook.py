@@ -108,16 +108,23 @@ def extract_product_names_from_shopping_list(text: str) -> List[str]:
                   "jar", "jars", "tin", "tins", "bag", "bags",
                   "pouch", "pouches", "box", "boxes", "dozen"}
 
+    # Descriptor words that are only meaningful as part of a phrase, not standalone
+    descriptor_words = {"baby", "premium", "large", "small", "fresh", "organic",
+                        "natural", "new", "classic", "original", "extra",
+                        "super", "mega", "mini", "jumbo", "value", "family",
+                        "regular", "select", "choice", "quality", "special"}
+
     for part in parts:
         # Split by spaces and consider each word
         subparts = part.split()
         for word in subparts:
             # Remove any trailing/leading punctuation
             word = word.strip(".,!?;:")
-            # Only consider words that are not too short, not stop words, and not units
+            # Only consider words that are not too short, not stop words, not units, and not descriptors
             if (len(word) > 2 and
                 word not in stop_words and
                 word not in unit_words and
+                word not in descriptor_words and   # Skip descriptor words as standalone terms
                 not word.isdigit()):  # Not just a number
                 terms.append(word)
 
@@ -397,6 +404,24 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
         return {
             "stores": [],
             "recommendation": "No products found",
+            "savings": "",
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }
+
+    # Drop products with no pricing data in any store at all
+    priced_products = []
+    for product in products:
+        has_price = await db.prices.count_documents({"product_id": str(product["_id"])}) > 0
+        if has_price:
+            priced_products.append(product)
+        else:
+            logger.info(f"Dropping product with no pricing data anywhere: {product.get('name', 'Unknown')}")
+    products = priced_products
+
+    if not products:
+        return {
+            "stores": [],
+            "recommendation": "No pricing data available for any product in your list",
             "savings": "",
             "date": datetime.now().strftime("%Y-%m-%d")
         }

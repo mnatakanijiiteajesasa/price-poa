@@ -6,7 +6,7 @@ from typing import List, Tuple, Dict, Any
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import logging
 
-from .models import PRODUCT_INDEXES, STORE_INDEXES, PRICE_INDEXES
+from .models import PRODUCT_INDEXES, STORE_INDEXES, PRICE_INDEXES, QUERY_LOG_INDEXES
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,16 @@ async def create_collection_indexes(db: AsyncIOMotorDatabase) -> None:
             db, "prices", PRICE_INDEXES
         )
         logger.info("Created indexes for prices collection")
+
+        # Create indexes for query_logs collection
+        await _create_indexes_for_collection(
+            db, "query_logs", QUERY_LOG_INDEXES
+        )
+        logger.info("Created indexes for query_logs collection")
+
+        # Ensure query_logs collection exists
+        await _ensure_query_logs_collection(db)
+        logger.info("Ensured query_logs collection exists")
 
         # Create time series collection for prices if it doesn't exist
         await _create_price_time_series_collection(db)
@@ -125,6 +135,29 @@ async def _create_price_time_series_collection(db: AsyncIOMotorDatabase) -> None
         await timeseries_db.create_index([("verified_at", -1)])
 
 
+async def _ensure_query_logs_collection(db: AsyncIOMotorDatabase) -> None:
+    """
+    Ensure the query_logs collection exists.
+    Creates it with appropriate options if it doesn't exist.
+    """
+    collection_name = "query_logs"
+
+    # Check if collection already exists
+    collection_names = await db.list_collection_names()
+    if collection_name in collection_names:
+        logger.debug(f"Collection {collection_name} already exists")
+        return
+
+    try:
+        # Create the query_logs collection
+        await db.create_collection(collection_name)
+        logger.info(f"Created collection: {collection_name}")
+
+    except Exception as e:
+        logger.warning(f"Could not create query_logs collection: {e}")
+        # Don't raise - the collection might be created implicitly when first used
+
+
 async def validate_indexes(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
     """
     Validate that all expected indexes exist and return status.
@@ -137,7 +170,8 @@ async def validate_indexes(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
     collections_to_check = [
         ("products", PRODUCT_INDEXES),
         ("stores", STORE_INDEXES),
-        ("prices", PRICE_INDEXES)
+        ("prices", PRICE_INDEXES),
+        ("query_logs", QUERY_LOG_INDEXES)
     ]
 
     for collection_name, index_definitions in collections_to_check:
@@ -174,5 +208,6 @@ def get_index_definitions() -> Dict[str, List[Tuple[List[Tuple[str, int]], Dict[
     return {
         "products": PRODUCT_INDEXES,
         "stores": STORE_INDEXES,
-        "prices": PRICE_INDEXES
+        "prices": PRICE_INDEXES,
+        "query_logs": QUERY_LOG_INDEXES
     }

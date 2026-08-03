@@ -308,3 +308,11 @@ PRICE_INDEXES = [
     ([("is_promotional", 1)], {"unique": False}),
     ([("product_id", 1), ("store_id", 1), ("verified_at", -1)], {"unique": False}),
 ]
+
+QUERY_LOG_INDEXES = [
+    ([("user_id", 1)], {"unique": False}),
+    ([("timestamp", -1)], {"unique": False}),  # Descending for recent-first queries
+    ([("ip_address", 1)], {"unique": False}),
+    ([("user_id", 1), ("timestamp", -1)], {"unique": False}),  # For user-specific queries over time
+    ([("ip_address", 1), ("timestamp", -1)], {"unique": False}),  # For IP-specific queries over time
+]
