@@ -217,9 +217,22 @@ def extract_meaningful_product_terms(text: str) -> List[str]:
         if len(term_lower) < 3:
             continue
 
+        # Skip if it's a common word that is unlikely to be a product name
+        common_words = {"and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "is", "are", "was", "were", "be", "been", "have", "has", "had", "do", "does", "did", "will", "would", "should", "could", "may", "might", "must", "can", "it", "its", "this", "that", "these", "those", "he", "she", "they", "we", "you", "i", "me", "him", "her", "us", "them", "a", "an", "the"}
+        if term_lower in common_words:
+            continue
+
         filtered_terms.append(term)
 
-    return filtered_terms
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_filtered_terms = []
+    for term in filtered_terms:
+        if term not in seen:
+            seen.add(term)
+            unique_filtered_terms.append(term)
+
+    return unique_filtered_terms
 
 
 async def find_alternative_product_in_store(db, product: dict, store_id: str) -> Optional[Dict[str, Any]]:
