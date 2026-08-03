@@ -355,7 +355,7 @@ def generate_shopping_list_image(data: dict) -> bytes:
             "total": parse_amount(s.get("total", 0)),
             "items": s.get("items", []),  # Keep the items data
         })
-    parsed_stores.sort(key=lambda s: s["total"])
+    # parsed_stores.sort(key=lambda s: s["total"])
     max_value = max((s["total"] for s in parsed_stores), default=1) or 1
 
     content_width = IMG_WIDTH - 2 * PADDING
