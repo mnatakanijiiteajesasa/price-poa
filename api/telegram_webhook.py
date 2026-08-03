@@ -708,11 +708,20 @@ async def telegram_webhook(
 
     text = text.strip()
 
+    # Extract client IP address for device tracking (considering proxies)
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # X-Forwarded-For can contain multiple IPs, the first is the client
+        client_ip = forwarded.split(',')[0].strip()
+    else:
+        # If not behind a proxy, use the direct client host
+        client_ip = request.client.host if request.client else "unknown"
+
     # Process the message
     try:
         processed = await process_telegram_message(chat_id, text)
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
+        logger.error(f"Error processing message from {chat_id} (IP: {client_ip}): {e}")
         fallback_text = "Sorry, our service is temporarily unavailable. Please try again later."
         send_telegram_text(chat_id, fallback_text)
         return JSONResponse(status_code=200, content={"status": "accepted"})
@@ -724,6 +733,7 @@ async def telegram_webhook(
             "user_id": chat_id,
             "text": text,
             "timestamp": datetime.now(timezone.utc),
+            "ip_address": client_ip,
             "products": [],  # will fill if we have product IDs
         }
         if processed.get("type") == "single_product":
@@ -733,6 +743,9 @@ async def telegram_webhook(
         elif processed.get("type") == "product_options":
             options = processed.get("data", {}).get("options", [])
             query_log["products"] = [opt["product_id"] for opt in options if opt.get("product_id")]
+
+        # Store the query log in database
+        await db.query_logs.insert_one(query_log)
     except Exception as e:
         logger.error(f"Failed to log query: {e}")
 
