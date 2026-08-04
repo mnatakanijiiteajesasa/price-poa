@@ -24,10 +24,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Configuration
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://host.docker.internal:27017")
-MONGODB_DB = os.getenv("MONGODB_DB", "pricepoa")
-QDRANT_HOST = os.getenv("QDRANT_HOST", "host.docker.internal")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+MONGODB_URI = os.getenv("MONGODB_URI")
+MONGODB_DB = os.getenv("MONGODB_DB")
+QDRANT_HOST = os.getenv("QDRANT_HOST")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT"))
 COLLECTION_NAME = "product_embeddings"
 VECTOR_SIZE = 384  # all-MiniLM-L6-v2 dimension
 MODEL_NAME = 'all-MiniLM-L6-v2'

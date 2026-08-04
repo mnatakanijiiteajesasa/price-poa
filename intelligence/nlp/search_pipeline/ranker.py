@@ -27,7 +27,7 @@ class RankingScore:
         """Convert to dictionary."""
         return {
             "vector_score": self.vector_score,
-            "fuzzy_score": self fuzzy_score,
+            "fuzzy_score": self.fuzzy_score,
             "brand_score": self.brand_score,
             "category_score": self.category_score,
             "quantity_score": self.quantity_score,

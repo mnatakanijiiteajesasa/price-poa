@@ -6,10 +6,11 @@ Uses BAAI/bge-small-en-v1.5 model and stores rich product payloads in Qdrant.
 import os
 import logging
 from typing import List, Dict, Any, Optional
-from datetime, timezone
+from datetime import datetime, timezone
 from dataclasses import asdict
 
-from motor.motor_asyncio import AsyncIOMotorDatabase, TYPE_CHECKING
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from qdrant_client import QdrantClient
