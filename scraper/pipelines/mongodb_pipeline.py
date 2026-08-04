@@ -1,6 +1,7 @@
 """
 MongoDB pipeline for PricePoa scraping items.
-Stores validated price data in MongoDB collections.
+Focuses solely on persistence: buffering, bulk writes, and basic error handling.
+Does NOT perform validation, normalization, or any business logic.
 """
 import logging
 from typing import Any, Dict, Union
@@ -18,18 +19,33 @@ class MongoDBPipeline:
     """
     Pipeline to store price scraping items in MongoDB.
     Handles connection management and batch operations for efficiency.
+
+    Responsibilities:
+    - Buffer items for bulk insertion
+    - Perform bulk upserts to prices collection
+    - Handle connection lifecycle
+    - Basic error handling and retry logic
+    - Logging and monitoring
+
+    Does NOT:
+    - Validate data (handled by ValidationPipeline)
+    - Normalize or clean data (handled by NormalizationPipeline)
+    - Perform lookups or enrichment
+    - Modify item data
     """
 
-    def __init__(self):
+    def __init__(self, buffer_size: int = 100):
         self.db: AsyncIOMotorDatabase = None
         self.buffer = []  # Buffer items for batch insertion
-        self.buffer_size = 100  # Flush buffer when this size is reached
+        self.buffer_size = buffer_size  # Flush buffer when this size is reached
         logger.info("MongoDBPipeline initialized")
 
     @classmethod
     def from_crawler(cls, crawler):
         """Create pipeline instance from crawler."""
-        return cls()
+        # Optional: get buffer size from settings
+        buffer_size = crawler.settings.getint('MONGODB_BUFFER_SIZE', 100)
+        return cls(buffer_size=buffer_size)
 
     async def open_spider(self, spider: scrapy.Spider):
         """Initialize MongoDB connection when spider opens."""
@@ -40,6 +56,7 @@ class MongoDBPipeline:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', 'database')))
             sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..', 'database')))
+            sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..')))
             from connection import get_database
             self.db = await get_database()
             logger.info(f"MongoDBPipeline connected to database for spider {spider.name}")
@@ -90,6 +107,7 @@ class MongoDBPipeline:
 
         try:
             buffer_to_flush = self.buffer.copy()
+            self.buffer.copy()
             self.buffer.clear()
 
             if not buffer_to_flush:
@@ -97,11 +115,15 @@ class MongoDBPipeline:
 
             logger.debug(f"Flushing {len(buffer_to_flush)} items to MongoDB")
 
-            # Prepare bulk operations
+            # Prepare bulk operations for prices collection
             operations = []
 
             for item in buffer_to_flush:
                 try:
+                    # Expect item to have: product_id, store_id, price_kes, source, verified_at,
+                    # is_promotional, promotion_details (already validated/normalized)
+                    # We do not modify the item; we trust validation pipeline.
+
                     # Create document for prices collection
                     price_doc = {
                         'product_id': item.get('product_id'),
@@ -111,23 +133,24 @@ class MongoDBPipeline:
                         'verified_at': item.get('verified_at', datetime.utcnow()),
                         'is_promotional': item.get('is_promotional', False),
                         'promotion_details': item.get('promotion_details'),
-                        'created_at': item.get('processed_at', datetime.utcnow()),
-                        # Store raw data for debugging/audit Trail
-                        'raw_data': item.get('raw_data', {})
+                        # Optional: store raw data for debugging if present
+                        # 'raw_data': item.get('raw_data', {})
                     }
 
-                    # Create update operation - upsert based on product+store+source+time window
-                    # This allows updating recent prices or inserting new ones
+                    # Create update operation - upsert based on product+store+source+day
+                    # This avoids duplicate prices for same product/store/source/day
+                    verified_at = item.get('verified_at')
+                    if isinstance(verified_at, datetime):
+                        day_start = verified_at.replace(hour=0, minute=0, second=0, microsecond=0)
+                    else:
+                        # If it's a string or missing, use today
+                        day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
                     filter_criteria = {
                         'product_id': item.get('product_id'),
                         'store_id': item.get('store_id'),
                         'source': item.get('source'),
-                        # Group prices by day to avoid too many duplicates
-                        'verified_at': {
-                            '$gte': item.get('verified_at', datetime.utcnow()).replace(
-                                hour=0, minute=0, second=0, microsecond=0
-                            )
-                        }
+                        'verified_at': {'$gte': day_start}
                     }
 
                     update_operation = UpdateOne(
@@ -140,23 +163,36 @@ class MongoDBPipeline:
                 except Exception as e:
                     logger.warning(f"Error preparing item for MongoDB: {e}")
                     logger.debug(f"Problematic item: {item}")
-                    continue
+                    continue  # Skip this item but continue with others
 
             # Execute bulk operation if we have any
             if operations:
-                result = await self.db.prices.bulk_write(operations, ordered=False)
-                logger.debug(
-                    f"MongoDB bulk write completed: "
-                    f"{result.upserted_count} inserted, "
-                    f"{result.modified_count} modified, "
-                    f"{len(operations) - result.upserted_count - result.modified_count} duplicates"
-                )
+                # Try with retries for transient errors
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        result = await self.db.prices.bulk_write(operations, ordered=False)
+                        logger.debug(
+                            f"MongoDB bulk write completed (attempt {attempt + 1}): "
+                            f"{result.upserted_count} inserted, "
+                            f"{result.modified_count} modified, "
+                            f"{len(operations) - result.upserted_count - result.modified_count} duplicates"
+                        )
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        if attempt == max_retries - 1:
+                            logger.error(f"Failed to flush buffer after {max_retries} attempts: {e}")
+                            # Optionally, we could put items back in buffer for retry?
+                            # For now, we drop them to avoid infinite loops.
+                        else:
+                            wait_time = 2 ** attempt  # Exponential backoff
+                            logger.warning(f"Bulk write failed (attempt {attempt + 1}), retrying in {wait_time}s: {e}")
+                            await asyncio.sleep(wait_time)
 
         except Exception as e:
             logger.error(f"Error flushing buffer to MongoDB: {e}")
-            # Put items back in buffer for retry? Or drop them?
-            # For now, we'll drop them to avoid infinite retry loops
-            # In production, you might want to implement a dead letter queue
+            # In case of catastrophic error, we clear buffer to avoid infinite retry loop
+            # Putting items back could cause repeated failures
             self.buffer.clear()
 
     def get_buffer_size(self) -> int:

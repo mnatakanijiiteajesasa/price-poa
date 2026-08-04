@@ -1,22 +1,28 @@
 """
-Data Normalization and Product Matching Pipeline for PricePoa Scraper.
-Standardizes scraped prices, categories, and attributes, matches items to canonical products, 
-and persists clean records to MongoDB collections.
+Refactored Normalization Pipeline for PricePoa Scraper.
+Focuses solely on semantic normalization and product canonicalization.
+Delegates validation to ValidationPipeline and persistence to MongoDBPipeline.
 """
 import logging
 import re
+from typing import Dict, Any, Union, Optional
+import scrapy
+from datetime import datetime, timezone
+
+# Import our new modular components
+from .text_normalizer import TextNormalizer
+from .attribute_extractor import AttributeExtractor
+from .canonical_product_builder import CanonicalProductBuilder
+from .alias_generator import AliasGenerator
+from .embedding_text_builder import EmbeddingTextBuilder
+from .models import ExtractedAttributes, CanonicalProduct, NormalizedProduct
+
+# Import existing shared components
 import sys
 import os
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, Tuple, Union
-import scrapy
-from bson import ObjectId
-
-# Adjust import path to load shared database connection
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', 'database')))
 sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..', 'database')))
-# Repo root, so relative writers (intelligence/outbox) are importable
 sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..')))
 from connection import get_database
 from intelligence.outbox.outbox import EmbeddingOutboxService
@@ -26,16 +32,38 @@ logger = logging.getLogger(__name__)
 
 class NormalizationPipeline:
     """
-    Standardization pipeline that extracts product properties, standardizes categories,
-    matches items to canonical products, and records price histories.
+    Semantic normalization pipeline that extracts product attributes,
+    builds canonical representations, and prepares data for validation and storage.
+
+    Responsibilities:
+    1. Text normalization (cleaning, standardization)
+    2. Attribute extraction (brand, category, size, etc.)
+    3. Canonical product construction
+    4. Alias generation
+    5. Embedding text creation
+    6. Product matching/creation via outbox (transactional)
+
+    Does NOT:
+    - Validate data (handled by ValidationPipeline)
+    - Directly write to MongoDB except through transactional outbox
+    - Perform price validation or cleaning
     """
 
     def __init__(self):
-        self.db = None
-        self.buffer = []
-        # Transactional product writer: keeps MongoDB and the embedding outbox in sync
+        # Initialize our modular components
+        self.text_normalizer = TextNormalizer()
+        self.attribute_extractor = AttributeExtractor()
+        self.canonical_builder = CanonicalProductBuilder()
+        self.alias_generator = AliasGenerator()
+        self.embedding_builder = EmbeddingTextBuilder()
+
+        # Transactional product writer: keeps MongoDB and embedding outbox in sync
         self.outbox = EmbeddingOutboxService()
-        logger.info("NormalizationPipeline initialized")
+
+        # Database connection (initialized in open_spider)
+        self.db = None
+
+        logger.info("NormalizationPipeline (refactored) initialized")
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -52,262 +80,180 @@ class NormalizationPipeline:
             raise
 
     async def close_spider(self, spider: scrapy.Spider):
-        """Flush remaining items when spider closes."""
+        """Cleanup when spider closes."""
         logger.info(f"NormalizationPipeline closed for spider {spider.name}")
 
-    async def process_item(self, item: Union[Dict, Any], spider: scrapy.Spider) -> Union[Dict, Any]:
+    async def process_item(self, item: Union[dict, Any], spider: scrapy.Spider) -> Union[Dict[Any, Any], Any]:
         """
-        Process the scraped item, matching it against canonical models and saving it to MongoDB.
+        Process the scraped item, normalizing and canonicalizing product data.
+
+        This method focuses ONLY on semantic normalization and product canonicalization.
+        Validation and persistence are handled by separate pipelines.
+
+        Args:
+            item: Scraped item (dict or scrapy.Item)
+            spider: Spider that scraped the item
+
+        Returns:
+            Item with normalized product data added
         """
-        if self.db is None:
+        # Convert scrapy.Item to dict for uniform handling
+        if hasattr(item, 'fields'):
+            item_dict = dict(item)
+        else:
+            item_dict = item
+
+        # Skip if missing essential fields (validation will catch these later)
+        if not item_dict.get('product_name'):
             return item
 
-        # Convert scrapy.Item to python dict
-        item_dict = dict(item) if hasattr(item, 'fields') else item
-
         try:
-            # 1. Clean and normalize price
-            price_text = item_dict.get('price_kes')
-            if price_text is None:
-                logger.warning(f"Drop item: missing price inside {item_dict.get('response_url')}")
-                return item
-
-            price = self._clean_price(price_text)
-            if price is None:
-                logger.warning(f"Drop item: invalid price string '{price_text}'")
-                return item
-
-            # 2. Extract brand, size, and clean title from raw name
+            # Step 1: Extract and normalize attributes from product name
             raw_name = item_dict.get('product_name', '')
-            if not raw_name:
-                logger.warning(f"Drop item: missing product name inside {item_dict.get('response_url')}")
-                return item
+            attributes = self._extract_and_normalize_attributes(raw_name)
 
-            clean_name, brand, size = self._parse_product_attributes(raw_name)
+            # Step 2: Build canonical product representation
+            canonical_product = self._build_canonical_product(attributes)
 
-            # 3. Translate category dynamically from category_mappings collection
-            raw_category = item_dict.get('category', 'General')
-            canonical_category = await self._get_canonical_category(raw_category)
+            # Step 3: Generate aliases
+            canonical_product.aliases = self.alias_generator.generate_aliases(canonical_product)
 
-            # 4. Find or create the Store ID mapping
-            store_chain = item_dict.get('store_chain', 'General')
-            store_branch = item_dict.get('store_branch', 'Online Store')
-            store_id = await self._get_or_create_store(store_chain, store_branch)
+            # Step 4: Generate embedding text
+            canonical_product.embedding_text = self.embedding_builder.build_embedding_text(canonical_product)
 
-            # 5. Lookup or create the Canonical Product in database
-            product_id = await self._get_or_create_canonical_product(
-                clean_name=clean_name,
-                brand=brand,
-                size=size,
-                category=canonical_category,
-                store_id=store_id,
-                product_url=item_dict.get('response_url', '')
+            # Step 5: Find or create canonical product in database
+            product_id = await self._get_or_create_canonical_product(canonical_product, item_dict)
+
+            # Step 6: Create normalized product container
+            normalized_product = NormalizedProduct(
+                canonical_product=canonical_product,
+                extracted_attributes=attributes,
+                canonical_id=product_id,
+                # Other fields will be filled by other pipelines:
+                # - store_id: from store lookup (could be done here or in separate step)
+                # - price: from price cleaning (should be done in validation or separate step)
+                # - source, product_url, is_promotional, promotion_details: from item
             )
 
-            # 6. Insert / Update the Daily Price snapshot (Deduplicated daily)
-            await self._save_price_record(
-                product_id=product_id,
-                store_id=store_id,
-                price=price,
-                source=item_dict.get('source', 'unknown'),
-                product_url=item_dict.get('response_url', ''),
-                is_promotional=item_dict.get('is_promotional', False),
-                promotion_details=item_dict.get('promotion_details')
-            )
+            # Add normalized data to item for downstream pipelines
+            item['normalized_product'] = normalized_product
+            item['product_id'] = str(product_id) if product_id else None
 
-            # Write resolved values back to original item object for subsequent pipelines (e.g. Validation)
-            item['product_id'] = str(product_id)
-            item['store_id'] = str(store_id)
-            item['price_kes'] = price
-            item['verified_at'] = datetime.utcnow()
+            # Note: Store ID lookup and price validation/cleaning should happen elsewhere
+            # This pipeline focuses purely on product normalization
 
         except Exception as e:
-            logger.error(f"Error processing item inside NormalizationPipeline: {e}", exc_info=True)
+            logger.error(f"Error normalizing product in NormalizationPipeline: {e}", exc_info=True)
+            # Don't fail the item - let validation pipeline handle missing data
 
-        return item
+        # Return as same type as input
+        if hasattr(item, 'fields'):
+            for key, value in item_dict.items():
+                item[key] = value
+            return item
+        else:
+            return item_dict
 
-    def _clean_price(self, price_val: Union[str, float, int]) -> Optional[float]:
-        """Convert raw price strings (e.g. 'KES 1,200.50') into clean float values."""
-        if isinstance(price_val, (int, float)):
-            return float(price_val)
-        if not price_val:
-            return None
-        try:
-            # Remove currency, commas, and other non-digit values except dots
-            cleaned = re.sub(r'[^\d\.]', '', str(price_val))
-            return float(cleaned)
-        except ValueError:
-            # Fallback regex extraction of first matching number
-            numbers = re.findall(r'\d+(?:\.\d+)?', str(price_val))
-            if numbers:
-                try:
-                    return float(numbers[0])
-                except ValueError:
-                    pass
-        return None
+    def _extract_and_normalize_attributes(self, raw_text: str) -> ExtractedAttributes:
+        """Extract and normalize attributes from raw product text."""
+        # Extract raw attributes
+        attributes = self.attribute_extractor.extract_attributes(raw_text)
 
-    def _parse_product_attributes(self, raw_title: str) -> Tuple[str, Optional[str], Optional[str]]:
-        """
-        Parse raw product titles to isolate Clean Name, Brand, and Size/Volume variant.
-        Example: "Broadways White Bread - 400g" -> ("White Bread", "Broadways", "400g")
-        """
-        # 1. Normalize spaces
-        title = re.sub(r'\s+', ' ', raw_title).strip()
+        # Normalize the text fields
+        if attributes.raw_text:
+            attributes.cleaned_text = self.text_normalizer.normalize_product(attributes.raw_text)
 
-        # 2. Extract Size (e.g., 400g, 500ml, 1 L, 2 Litres, 10 Pcs)
-        size_pattern = r'(\d+(?:\.\d+)?\s*(?:g|kg|ml|l|litre|litres|pcs|packs|pc|pieces))\b'
-        size_match = re.search(size_pattern, title, re.IGNORECASE)
-        size = size_match.group(1).replace(" ", "").lower() if size_match else None
+        # Normalize specific fields
+        if attributes.brand:
+            attributes.brand = self.text_normalizer.normalize_text(attributes.brand)
+        if attributes.category:
+            attributes.category = self.text_normalizer.normalize_text(attributes.category)
+        if attributes.subcategory:
+            attributes.subcategory = self.text_normalizer.normalize_text(attributes.subcategory)
+        if attributes.unit:
+            attributes.unit = self.text_normalizer.normalize_unit(attributes.unit)
 
-        if size_match:
-            title = title.replace(size_match.group(0), "")
+        return attributes
 
-        # 3. Match Brand against common Kenyan brands
-        known_brands = [
-            "broadways", "bidco", "brookside", "naivas", "carrefour", "quickmart", 
-            "daisy", "kelloggs", "nestle", "pampers", "huggies", "unilever", "cadbury",
-            "kapa", "soko", "jogoo", "pembe", "exe", "chapa mandashi", "ketepa", "kericho gold"
-        ]
-        brand = None
-        for b in known_brands:
-            if re.search(r'\b' + re.escape(b) + r'\b', title, re.IGNORECASE):
-                brand = b.capitalize()
-                title = re.sub(r'\b' + re.escape(b) + r'\b', "", title, flags=re.IGNORECASE)
-                break
+    def _build_canonical_product(self, attributes: ExtractedAttributes) -> CanonicalProduct:
+        """Build a canonical product representation from extracted attributes."""
+        # Start with cleaned name or fallback to original
+        base_name = attributes.cleaned_text or attributes.raw_text
 
-        # Clean trailing and leading punctuation
-        clean_title = re.sub(r'[-\s,]+$', '', re.sub(r'^[-\s,]+', '', title)).strip()
-        return clean_title, brand, size
-
-    async def _get_canonical_category(self, raw_category: str) -> str:
-        """
-        Queries the database mappings table dynamically.
-        Creates a new mapped category placeholder if none exists.
-        """
-        category_key = raw_category.strip().lower()
-        if not category_key:
-            return "General"
-
-        # Query MongoDB mapping
-        mapping = await self.db.category_mappings.find_one({"raw_category": category_key})
-        if mapping:
-            return mapping.get("canonical_category", "General")
-
-        # Create unmapped placeholder entry so admin can configure it later
-        new_mapping = {
-            "raw_category": category_key,
-            "canonical_category": "Unmapped",  # Needs admin manual mapping
-            "suggested_category": raw_category.strip(),
-            "created_at": datetime.now(timezone.utc)
-        }
-        await self.db.category_mappings.insert_one(new_mapping)
-        logger.info(f"Registered new unmapped category: '{raw_category}'")
-        return "Unmapped"
-
-    async def _get_or_create_store(self, chain_name: str, branch_name: str) -> str:
-        """Fetch or create store record in database."""
-        store = await self.db.stores.find_one({
-            "chain_name": {"$regex": f"^{re.escape(chain_name)}$", "$options": "i"},
-            "branch_name": {"$regex": f"^{re.escape(branch_name)}$", "$options": "i"}
-        })
-        if store:
-            return str(store["_id"])
-
-        # Insert placeholder store
-        new_store = {
-            "chain_name": chain_name,
-            "branch_name": branch_name,
-            "town": "Nairobi",  # Default values
-            "county": "Nairobi",
-            "is_active": True,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc)
-        }
-        res = await self.db.stores.insert_one(new_store)
-        return str(res.inserted_id)
-
-    async def _get_or_create_canonical_product(
-        self, clean_name: str, brand: Optional[str], size: Optional[str], category: str, store_id: str, product_url: str
-    ) -> str:
-        """
-        Matches standard title against products collection.
-        Saves store specific link to product document to avoid duplicate crawl entities.
-        """
-        query = {"name": {"$regex": f"^{re.escape(clean_name)}$", "$options": "i"}}
-        if brand:
-            query["brand"] = brand
-
-        product = await self.db.products.find_one(query)
-        
-        # Build updates
-        update_fields = {}
-        if size:
-            update_fields["$addToSet"] = {"sizes_variants": size}
-        if product_url:
-            update_fields["$set"] = {f"store_links.{store_id}": product_url}
-
-        if product:
-            product_id = str(product["_id"])
-            if update_fields:
-                # Transactional: product update + outbox record commit atomically.
-                # The embedding worker re-indexes this product once Qdrant confirms.
-                await self.outbox.update_product_with_outbox(
-                    product_id, update_fields, intent="update"
-                )
-            return product_id
-
-        # Create new product record (transactional with the embedding outbox)
-        new_product = {
-            "name": clean_name,
-            "brand": brand,
-            "category": category,
-            "sizes_variants": [size] if size else [],
-            "swahili_aliases": [],
-            "sheng_aliases": [],
-            "store_links": {store_id: product_url} if product_url else {},
-        }
-        product_id = await self.outbox.insert_product_with_outbox(new_product, intent="create")
-        return product_id
-
-    async def _save_price_record(
-        self, product_id: str, store_id: str, price: float, source: str, product_url: str, is_promotional: bool, promotion_details: Optional[str]
-    ):
-        """Save price point, grouping prices daily to prevent duplicates on same date."""
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-
-        price_doc = {
-            "product_id": product_id,
-            "store_id": store_id,
-            "price_kes": price,
-            "source": source,
-            "product_url": product_url,
-            "is_promotional": is_promotional,
-            "promotion_details": promotion_details,
-            "verified_at": datetime.now(timezone.utc),
-            "created_at": datetime.now(timezone.utc)
-        }
-
-        # Query if price is already written today
-        filter_criteria = {
-            "product_id": product_id,
-            "store_id": store_id,
-            "source": source,
-            "created_at": {"$gte": today_start}
-        }
-
-        # Update if exists, else insert
-        res = await self.db.prices.update_one(
-            filter_criteria,
-            {
-                "$set": {
-                    "price_kes": price,
-                    "product_url": product_url,
-                    "is_promotional": is_promotional,
-                    "promotion_details": promotion_details,
-                    "verified_at": datetime.now(timezone.utc)
-                },
-                "$setOnInsert": {"created_at": datetime.now(timezone.utc)}
-            },
-            upsert=True
+        # Build canonical product
+        canonical = self.canonical_builder.build_canonical_product(
+            name=base_name,
+            brand=attributes.brand,
+            category=attributes.category,
+            subcategory=attributes.subcategory,
+            size=attributes.size,
+            unit=attributes.unit,
+            variant=attributes.variant,
+            flavour=attributes.flavour,
+            package_type=attributes.package_type
         )
-        logger.debug(f"Saved price record to MongoDB (upsert={res.upserted_id is not None})")
+
+        return canonical
+
+    async def _get_or_create_canonical_product(self,
+                                              canonical_product: CanonicalProduct,
+                                              item_dict: dict) -> Optional[str]:
+        """
+        Find or create the canonical product in the database.
+        Uses the transactional outbox service for consistency.
+
+        Returns:
+            Product ID if found/created, None otherwise
+        """
+        if not self.db:
+            logger.warning("Database not initialized")
+            return None
+
+        try:
+            # Build search query based on canonical attributes
+            query = {"name": {"$regex": f"^{re.escape(canonical_product.canonical_name)}$", "$options": "i"}}
+
+            if canonical_product.brand:
+                query["brand"] = canonical_product.brand
+
+            # Look for existing product
+            existing_product = await self.db.products.find_one(query)
+
+            if existing_product:
+                product_id = str(existing_product["_id"])
+
+                # Update if we have new information to add
+                update_fields = {}
+                if canonical_product.size:
+                    update_fields["$addToSet"] = {"sizes_variants": str(canonical_product.size)}
+                # Note: We don't update store_links here - that's handled by price pipeline
+
+                if update_fields:
+                    await self.outbox.update_product_with_outbox(
+                        product_id, update_fields, intent="update"
+                    )
+
+                return product_id
+            else:
+                # Create new product
+                new_product_doc = {
+                    "name": canonical_product.canonical_name,
+                    "brand": canonical_product.brand,
+                    "category": canonical_product.category,
+                    # Note: subcategory would need to be stored somewhere -
+                    # for now we might put it in a custom field or ignore
+                    "sizes_variants": [str(canonical_product.size)] if canonical_product.size else [],
+                    "store_links": {},  # Will be populated by price pipeline
+                    # TODO: Add subcategory, variant, flavour fields to product schema if needed
+                }
+
+                product_id = await self.outbox.insert_product_with_outbox(
+                    new_product_doc, intent="create"
+                )
+
+                logger.info(f"Created new canonical product: {canonical_product.canonical_name} (ID: {product_id})")
+                return product_id
+
+        except Exception as e:
+            logger.error(f"Error in get_or_create_canonical_product: {e}", exc_info=True)
+            return None

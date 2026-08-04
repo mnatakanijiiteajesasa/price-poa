@@ -1,0 +1,270 @@
+"""
+Attribute extraction for product data.
+Extracts structured attributes from raw product text.
+"""
+import re
+from typing import List, Optional, Dict, Any
+from dataclasses import dataclass, field
+from .models import ExtractedAttributes
+
+
+@dataclass
+class ExtractionRules:
+    """Configuration for attribute extraction."""
+    # Known brands for detection
+    known_brands: List[str] = field(default_factory=lambda: [
+        "broadways", "bidco", "brookside", "naivas", "carrefour", "quickmart",
+        "daisy", "kelloggs", "nestle", "pampers", "huggies", "unilever", "cadbury",
+        "kapa", "soko", "jogoo", "pembe", "exe", "chapa mandashi", "ketepa", "kericho gold",
+        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi"
+    ])
+
+    # Common categories
+    known_categories: List[str] = field(default_factory=lambda: [
+        "milk", "bread", "sugar", "flour", "rice", "maize", "unga", "salt",
+        "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
+        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco",
+        "medicine", "drugs", "pharmacy", "cosmetics", "beauty",
+        "electronics", "phones", "computers", "clothing", "shoes"
+    ])
+
+    # Unit patterns
+    unit_patterns: List[str] = field(default_factory=lambda: [
+        r'kg', r'g', r'mg',                    # weight
+        r'ml', r'l',                            # volume
+        r'pcs?', r'packs?',                     # count
+        r'inch', r'ft', r'feet',               # length
+    ])
+
+
+class AttributeExtractor:
+    """
+    Extracts structured attributes from raw product data.
+
+    Responsibilities:
+    - Extract brand
+    - Extract category/subcategory
+    - Extract size/unit/quantity
+    - Extract variant/flavour
+    - Extract package type
+    - Extract colour (where applicable)
+    """
+
+    def __init__(self, rules: Optional[ExtractionRules] = None):
+        self.rules = rules or ExtractionRules()
+
+        # Compile regex patterns for efficiency
+        self._size_pattern = re.compile(
+            r'(\d+(?:\.\d+)?)\s*(' + '|'.join(self.rules.unit_patterns) + r')\b',
+            re.IGNORECASE
+        )
+
+        # Brand pattern (will be built dynamically)
+        self._brand_pattern = None
+        self._rebuild_brand_pattern()
+
+    def _rebuild_brand_pattern(self):
+        """Rebuild the brand regex pattern from known brands."""
+        if self.rules.known_brands:
+            escaped_brands = [re.escape(brand) for brand in self.rules.known_brands]
+            pattern = r'\b(' + '|'.join(escaped_brands) + r')\b'
+            self._brand_pattern = re.compile(pattern, re.IGNORECASE)
+        else:
+            self._brand_pattern = None
+
+    def extract_attributes(self, raw_text: str) -> ExtractedAttributes:
+        """
+        Extract attributes from raw product text.
+
+        Args:
+            raw_text: Raw product title/description
+
+        Returns:
+            ExtractedAttributes object with discovered attributes
+        """
+        attrs = ExtractedAttributes(raw_text=raw_text)
+
+        if not raw_text:
+            return attrs
+
+        # Clean text for processing
+        cleaned = re.sub(r'\s+', ' ', raw_text.strip())
+        attrs.cleaned_text = cleaned
+
+        # Extract size and unit
+        size_match = self._size_pattern.search(cleaned)
+        if size_match:
+            attrs.size = float(size_match.group(1))
+            attrs.unit = size_match.group(2).lower()
+
+        # Extract brand
+        attrs.brand = self._extract_brand(cleaned)
+
+        # Extract category/subcategory
+        attrs.category, attrs.subcategory = self._extract_category(cleaned)
+
+        # Extract variant/flavour
+        attrs.variant, attrs.flavour = self._extract_variant_flavour(cleaned, attrs.brand, attrs.category)
+
+        # Extract package type
+        attrs.package_type = self._extract_package_type(cleaned)
+
+        # Extract colour
+        attrs.colour = self._extract_colour(cleaned)
+
+        return attrs
+
+    def _extract_brand(self, text: str) -> Optional[str]:
+        """Extract brand from text."""
+        if not self._brand_pattern:
+            return None
+
+        match = self._brand_pattern.search(text)
+        if match:
+            # Return the brand as found in known_brands (proper casing)
+            matched_text = match.group(0).lower()
+            for brand in self.rules.known_brands:
+                if brand.lower() == matched_text:
+                    return brand
+            return matched_text  # fallback
+        return None
+
+    def _extract_category(self, text: str) -> tuple[Optional[str], Optional[str]]:
+        """
+        Extract category and subcategory from text.
+
+        Returns:
+            Tuple of (category, subcategory)
+        """
+        if not text:
+            return None, None
+
+        text_lower = text.lower()
+
+        # Look for known categories
+        for category in self.rules.known_categories:
+            if category in text_lower:
+                # Try to find subcategory (more specific terms)
+                subcategory = None
+                for subcat in self.rules.known_categories:
+                    if subcat != category and subcat in text_lower:
+                        subcategory = subcat
+                        break
+                return category, subcategory
+
+        return None, None
+
+    def _extract_variant_flavour(self, text: str, brand: Optional[str], category: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+        """
+        Extract variant and flavour from text.
+
+        This is heuristic-based - looks for descriptive terms after removing
+        brand, size, unit, and category.
+        """
+        if not text:
+            return None, None
+
+        # Start with cleaned text
+        working_text = text.lower()
+
+        # Remove brand if found
+        if brand:
+            brand_pattern = re.compile(r'\b' + re.escape(brand.lower()) + r'\b')
+            working_text = brand_pattern.sub('', working_text)
+
+        # Remove size/unit patterns
+        working_text = self._size_pattern.sub('', working_text)
+
+        # Remove category if found
+        if category:
+            category_pattern = re.compile(r'\b' + re.escape(category.lower()) + r'\b')
+            working_text = category_pattern.sub('', working_text)
+
+        # Clean up extra spaces
+        working_text = re.sub(r'\s+', ' ', working_text).strip()
+
+        # Common flavour/variant indicators
+        flavour_indicators = [
+            'chocolate', 'vanilla', 'strawberry', 'banana', 'mango', 'pineapple',
+            'lemon', 'lime', 'orange', 'apple', 'blackcurrant', 'raspberry',
+            'mint', 'menthol', 'plain', 'flavoured', 'flavored', 'sweetened',
+            'unsweetened', 'low-fat', 'fat-free', 'skim', 'whole', 'semi-skimmed'
+        ]
+
+        variant_indicators = [
+            'loaf', 'bun', 'roll', 'slice', 'granulated', 'brown', 'white',
+            'pure', 'natural', 'organic', 'premium', 'standard', 'economy',
+            'family', 'pack', 'bundle', 'twin', 'triple'
+        ]
+
+        flavour = None
+        variant = None
+
+        # Check for flavours
+        for indicator in flavour_indicators:
+            if indicator in working_text:
+                flavour = indicator
+                # Remove from text to avoid double-counting
+                working_text = working_text.replace(indicator, '')
+                break
+
+        # Check for variants
+        for indicator in variant_indicators:
+            if indicator in working_text:
+                variant = indicator
+                # Remove from text to avoid double-counting
+                working_text = working_text.replace(indicator, '')
+                break
+
+        # Clean up again
+        if flavour or variant:
+            working_text = re.sub(r'\s+', ' ', working_text).strip()
+
+        # Remaining text might be additional descriptor
+        if working_text and len(working_text) > 2:
+            if not variant:
+                variant = working_text
+            elif not flavour:
+                flavour = working_text
+
+        return variant, flavour
+
+    def _extract_package_type(self, text: str) -> Optional[str]:
+        """Extract package type from text."""
+        if not text:
+            return None
+
+        text_lower = text.lower()
+
+        package_types = [
+            'bottle', 'can', 'packet', 'pack', 'box', 'carton', 'jar', 'tin',
+            'pouch', 'sachet', 'wrapper', 'bag', 'sack', 'crate', 'barrel',
+            'container', 'wrapper', 'film', 'wrap'
+        ]
+
+        for ptype in package_types:
+            if ptype in text_lower:
+                return ptype
+
+        return None
+
+    def _extract_colour(self, text: str) -> Optional[str]:
+        """Extract colour from typing matters)
+            """
+            """
+            if not text:
+                return None
+
+            text_lower = text.lower()
+
+            colours = [
+                'white', 'black', 'red', 'blue', 'green', 'yellow', 'brown', 'orange',
+                'purple', 'pink', 'grey', 'gray', 'silver', 'gold', 'transparent',
+                'clear', 'natural'
+            ]
+
+            for colour in colours:
+                if colour in text_lower:
+                    return colour
+
+            return None
