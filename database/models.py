@@ -379,6 +379,7 @@ class ChatMessage(BaseModel):
         }
 
 
+
 # Collection validation schemas for MongoDB
 CHAT_SESSION_VALIDATOR = {
     "$jsonSchema": {
@@ -714,6 +715,7 @@ class ChatRequest(BaseModel):
         }
 
 
+
 # Updated Chat Session Schema (more general purpose for buyer-seller chats)
 class ChatSession(BaseModel):
     """Chat session schema for the chat_sessions collection."""
@@ -750,6 +752,7 @@ class ChatSession(BaseModel):
                 "updated_at": "2026-08-04T10:35:00Z"
             }
         }
+
 
 
 # Collection validation schemas for MongoDB
