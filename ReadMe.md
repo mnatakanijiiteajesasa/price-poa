@@ -93,6 +93,8 @@ docker compose run --rm scraper python scraper/worker.py --mode once --spider th
 docker compose run --rm scraper python inspect_selectors.py https://ke.thebar.com/collections/party
 ```
 
+---
+
 ## 4. Viewing Database Contents
 
 There are three ways to view and query your scraped price data:
@@ -191,6 +193,7 @@ These components are orchestrated by the `IntelligenceEngine` class in `intellig
 The intelligence components are initialized and maintained via the `initialize_intelligence` and `run_intelligence_maintenance` functions, which train/update models using recent data from the MongoDB database.
 
 ---
+
 ## 6b. MongoDB ↔ Qdrant Embedding Consistency (Outbox)
 
 Product embeddings live in Qdrant's `product_embeddings` collection but their source
@@ -231,61 +234,128 @@ sudo docker exec -it pricepoa_intelligence python -m outbox.backfill
 sudo docker exec -it pricepoa_intelligence python -m outbox.backfill --force
 
 # Inspect outbox state in mongosh
-sudo docker compose exec mongo mongosh -u pricepoa_dev -p pricepoa_dev_password --authenticationDatabase admin pricepoa --eval 'db.embeddings_outbox.aggregate([{$group:{_id:"$status",n:{$sum:1}}}])'
+sudo docker compose exec mongo mongosh -u pricepoa_dev -p pricepoa_dev_password --authenticationDatabase admin pricepoa --eval 'db.embeddings_outbox.aggregate([{$match: {processed: false}}])'
 ```
-
-Outbox records store `intent` (`create`/`update`/`delete`/`backfill`), `status`
-(`pending`/`processing`/`processed`), an `attempts` counter, and `last_error`/`backoff_until`
-so permanent failures are retried with backoff rather than lost. Every product write the
-scraper performs (via `NormalizationPipeline`) already goes through the outbox
-transactionally; the scheduler's 6-hourly backfill catches anything written outside it.
-
-### Direct (legacy) indexer
-
-`python -m index_product_embeddings` still works as a **one-off repair tool** that writes
-straight to Qdrant without the outbox. For normal operation prefer the outbox so writes
-stay consistent.
-
-## 7. Stop and Clean Up Services
-
-* **Stop all containers** (leaves database volumes intact):
-  ```bash
-  sudo docker compose down
-  ```
-* **Wipe all containers, networks, and data volumes** (resets the database completely):
-  ```bash
-  sudo docker compose down -v
-  ```
 
 ---
 
-## 8. Troubleshooting & Common Mismatches
+## 6c. Search Pipeline
 
-### 1. `ValueError: "...Queue" does not support CONCURRENT_REQUESTS_PER_IP`
-* **Cause**: Modern Scrapy uses `DownloaderAwarePriorityQueue` which limits concurrency by domain, not IP.
-* **Resolution**: Ensure `CONCURRENT_REQUESTS_PER_IP` is commented out or removed in `settings.py`. Use `CONCURRENT_REQUESTS_PER_DOMAIN = 1` instead.
+The search pipeline has been refactored into a modular, layered architecture. Each stage of the pipeline is
+handled by a dedicated component, making the system more maintainable and extensible. The pipeline consists
+of the following stages:
 
-### 2. `Page.goto: Timeout 180ms exceeded`
-* **Cause**: Scrapy download timeouts are defined in **seconds** (e.g., 180s), while Playwright/Puppeteer page navigation expects **milliseconds** (180,000ms). Without conversion, a 180s timeout is interpreted as 180ms.
-* **Resolution**: The `InvisiblePlaywrightMiddleware` automatically converts seconds to milliseconds before dispatching requests.
+1. **Text Normalization** (`normalizer.py`) – lowercase, punctuation removal, whitespace normalization,
+   unicode normalization, quantity/unit normalization, synonym expansion, stopword removal (where appropriate).
+2. **Query Parsing** (`query_parser.py`) – extracts structured attributes (brand, category, size, unit, keywords)
+   from user queries and returns a `ParsedQuery` dataclass.
+3. **Vector Search** (`vector_search.py`) – retrieves top candidates using the BGE model (`BAAI/bge-small-en-v1.5`)
+   with rich payloads stored in Qdrant for reranking.
+4. **RapidFuzz Re-ranking** (`retrieval.py`) – re-ranks only the retrieved candidates (not the entire DB)
+   using RapidFuzz for lexical similarity.
+5. **Business Rule Ranking** (`ranker.py`) – combines multiple signals with weighted scoring (vector: 45%,
+   fuzzy: 25%, brand: 15%, category: 10%, quantity: 10%, alias: 5%) and attribute boosting.
 
-### 3. `Forbidden by robots.txt` or Offsite Requests Dropped
-* **Cause**: Supermarkets block scrapers via their `robots.txt` policies.
-* **Resolution**: Set `ROBOTSTXT_OBEY = False` in `settings.py`. Also ensure `allowed_domains` in spiders contains raw hosts (e.g., `['carrefour.ke']`), not full URLs.
+For a detailed breakdown of each component, see [SEARCH_PIPELINE_SUMMARY.md](SEARCH_PIPELINE_SUMMARY.md).
 
-### 4. `missing or empty required field: Product ID` in Pipelines
-* **Cause**: Item validation runs before normalization, checking fields that aren't populated yet.
-* **Resolution**: Swap pipeline priorities in `settings.py` so `NormalizationPipeline` runs first (`300`) to match items to database entities, followed by `PriceValidationPipeline` (`400`).
+---
 
-### 5. `NotImplementedError: Database objects do not implement truth value testing`
-* **Cause**: PyMongo 4+ raises an error when comparing databases or collections in boolean contexts (`if not self.db`).
-* **Resolution**: Use explicit `None` checks (`if self.db is None`) instead.
+## 7. Scraper Normalization Pipeline (refactored)
 
-### 6. Qdrant Connection Issues
-* **Symptoms**: Logs show "Failed to initialize Qdrant client" or vector search fallback to fuzzy matching.
-* **Resolution**:
-  1. Verify the `qdrant` service is running: `docker compose ps qdrant`
-  2. Check Qdrant logs: `docker compose logs qdrant`
-  3. Ensure the `.env` file contains `QDRANT_HOST=qdrant` and `QDRANT_PORT=6333`
-  4. Verify network connectivity: `docker compose exec api ping -c 3 qdrant`
-  5. If using custom hosts/ports, update the environment variables accordingly.
+The scraper's normalization pipeline has been refactored to focus solely on semantic normalization and
+product canonicalization. It now consists of several modular components:
+
+- `text_normalizer.py`: Handles text cleaning, normalization, and synonym expansion.
+- `attribute_extractor.py`: Extracts structured attributes (brand, category, size, unit, variant, flavour,
+  package type, colour) from raw text.
+- `canonical_product_builder.py`: Builds a canonical product representation from extracted attributes.
+- `alias_generator.py`: Generates alternative names and variations for products.
+- `embedding_text_builder.py`: Creates rich semantic text for embedding models.
+
+The pipeline now delegates validation to `validation_pipeline.py` and persistence to `mongodb_pipeline.py`,
+adhering to the single responsibility principle. It performs price cleaning (string to float) and store
+lookup/creation as enrichment steps, but does not validate data or write price records directly to MongoDB
+(except via the transactional outbox for product synchronization).
+
+---
+
+## 8. Stop and Clean Up Services
+
+To stop all running containers:
+```bash
+sudo docker compose down
+```
+
+To remove containers, networks, and volumes (including persistent data):
+```bash
+sudo docker compose down -v
+```
+
+---
+
+## 9. Troubleshooting & Common Mismatches
+
+### MongoDB Connection Issues
+
+If you encounter connection errors between services and MongoDB:
+1. Verify MongoDB is running as a replica set (required for transactions and change streams).
+2. Check the `mongo-init` container logs to ensure the replica set was initialized:
+   ```bash
+   sudo docker compose logs mongo-init
+   ```
+3. Ensure the `MONGODB_URI` in `.env` includes the replica set name (`mongodb://host:27017/?replicaSet=rs0`).
+
+### Qdrant Connection Issues
+
+If the intelligence service cannot connect to Qdrant:
+1. Verify the Qdrant container is healthy:
+   ```bash
+   sudo docker compose ps qdrant
+   ```
+2. Check the `QDRANT_HOST` and `QDRANT_PORT` in `.env` match the Qdrant service definition.
+3. Inspect the intelligence service logs for connection errors:
+   ```bash
+   sudo docker compose logs -f intelligence
+   ```
+
+### Scraper Not Running Spiders
+
+If spiders are not executing:
+1. Check the scheduler logs:
+   ```bash
+   sudo docker compose logs -f scraper
+   ```
+2. Verify the `scrape_targets` collection in MongoDB has active targets.
+3. Ensure spiders are not disabled in their custom settings.
+
+### High Memory Usage in Intelligence Service
+
+The embedding model and vector operations can be memory-intensive:
+1. Consider reducing the batch size in `intelligence/config.py` if OOM errors occur.
+2. Monitor memory usage with `docker stats`.
+3. Ensure sufficient RAM is allocated to the Docker VM (especially on Docker Desktop for Mac/Windows).
+
+### API Webhook Failures
+
+If Telegram/WhatsApp webhooks are failing:
+1. Verify the API endpoint is publicly accessible (use ngrok or similar for local development).
+2. Check the webhook URL configured in Telegram/BotFather or WhatsApp Business API.
+3. Inspect API logs for request parsing errors:
+   ```bash
+   sudo docker compose logs -f api
+   ```
+
+### Embedding Outbox Backlog
+
+If the `embeddings_outbox` collection grows without being processed:
+1. Check the outbox worker logs:
+   ```bash
+   sudo docker compose logs -f intelligence
+   ```
+2. Ensure the worker is not stuck on a particular product (see logs for errors).
+3. Manually trigger a backfill if needed:
+   ```bash
+   sudo docker exec -it pricepoa_intelligence python -m outbox.backfill
+   ```
+
+---
