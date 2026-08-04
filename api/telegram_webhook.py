@@ -10,6 +10,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from pydantic import BaseModel, Field, ValidationError
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
@@ -22,8 +23,8 @@ from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_fuzzy
 from query_engine import find_product
 from database.models import (
-    ChatSession, ChatRoom, ChatMessage, Grocer, ChatRequest,
-    GrocerReview, GROCER_VALIDATOR, GROCER_REVIEW_VALIDATOR,
+    ChatSession, ChatMessage, Grocer, ChatRequest,
+    GrocerReview, DiscoverySearchContext, GROCER_VALIDATOR, GROCER_REVIEW_VALIDATOR,
     CHAT_SESSION_VALIDATOR, CHAT_MESSAGE_VALIDATOR
 )
 
@@ -75,6 +76,16 @@ def _to_object_id(value: str):
         return ObjectId(value)
     except Exception:
         return value
+
+async def find_active_session_for_user(db, chat_id: int) -> Optional[Dict[str, Any]]:
+    """Find an active chat session where chat_id is either the buyer or the grocer."""
+    return await db.chat_sessions.find_one({
+        "status": "active",
+        "$or": [
+            {"buyer_user_id": chat_id},
+            {"grocer_telegram_user_id": chat_id},
+        ]
+    })
 
 async def verify_session_completion(session_id: str) -> bool:
     """Verify that a session exists and has been completed."""
@@ -398,7 +409,18 @@ async def handle_callback_query(callback_query: Dict[str, Any]):
             send_telegram_text(chat_id, "Sorry, we couldn't find that chat session.")
             return
 
+        if session.get("buyer_user_id") != user_id:
+            logger.warning(f"User {user_id} tried to rate session {session_id} they weren't the buyer on")
+            send_telegram_text(chat_id, "Only the buyer in this chat can leave a rating.")
+            return
+
         grocer_id = str(session["grocer_id"]) if session.get("grocer_id") else ""
+
+        can_review = await check_review_rate_limit(grocer_id, user_id)
+        if not can_review:
+            send_telegram_text(chat_id, "You've already rated this seller recently. Thanks for your feedback!")
+            return
+
         review = GrocerReview(
             grocer_id=grocer_id,
             reviewer_user_id=user_id,
@@ -407,7 +429,12 @@ async def handle_callback_query(callback_query: Dict[str, Any]):
             session_id=session_id,
             created_at=datetime.now(timezone.utc),
         )
-        await db.grocer_reviews.insert_one(review.dict(by_alias=True))
+        try:
+            await db.grocer_reviews.insert_one(review.dict(by_alias=True))
+        except DuplicateKeyError:
+            send_telegram_text(chat_id, "You've already rated this seller for this chat. Thanks!")
+            return
+
         await update_grocer_credibility_score(grocer_id)
         await update_review_stats(grocer_id)
 
@@ -997,79 +1024,32 @@ async def process_telegram_message(chat_id: int, text: str, background_tasks: Op
     """
     logger.info(f"Processing message from {chat_id}: {text}")
 
-    # Handle GTA 6 special chat dimension
     text_lower = text.lower().strip()
-    if text_lower in ["gta 6", "gta6", "grand theft auto 6", "grand theft auto six"]:
-        # Check if there's an active GTA 6 chat room
+
+    # Commands bypass relay even mid-session (so /end, ACCEPT, DECLINE always work).
+    is_command = (
+        text.startswith("/")
+        or text.upper().startswith("ACCEPT ")
+        or text.upper().startswith("DECLINE ")
+    )
+
+    if not is_command:
         db = await get_database()
+        session = await find_active_session_for_user(db, chat_id)
+        if session:
+            is_buyer = session["buyer_user_id"] == chat_id
+            recipient_id = session["grocer_telegram_user_id"] if is_buyer else session["buyer_user_id"]
 
-        # Look for existing active GTA 6 chat room
-        existing_room = await db.chat_rooms.find_one({
-            "topic": {"$regex": "^gta 6$", "$options": "i"},
-            "is_active": True
-        })
-
-        if existing_room:
-            # Join existing chat room
-            room_id = str(existing_room["_id"])
-
-            # Add user as participant if not already counted
-            # For simplicity, we'll just increment participant count (in a real app,
-            # we'd check if user is already in the room)
-            await db.chat_rooms.update_one(
-                {"_id": ObjectId(room_id)},
-                {"$inc": {"participant_count": 1}, "$set": {"updated_at": datetime.now(timezone.utc)}}
-            )
-
-            # Save the message to the chat room
             chat_message = ChatMessage(
-                session_id=room_id,
+                session_id=str(session["_id"]),
                 user_id=chat_id,
                 message_text=text,
-                created_at=datetime.now(timezone.utc)
             )
             await db.chat_messages.insert_one(chat_message.dict(by_alias=True))
 
-            # Return a special response type for GTA 6 chat
             return {
-                "type": "gta6_chat",
-                "data": {
-                    "session_id": room_id,
-                    "message": f"Welcome to the GTA 6 chat dimension! You're now chatting with other GTA 6 enthusiasts. Your message: '{text}'",
-                    "participant_count": existing_room["participant_count"] + 1
-                }
-            }
-        else:
-            # Create new GTA 6 chat room
-            chat_room = ChatRoom(
-                topic="GTA 6",
-                description="Chat room for discussing Grand Theft Auto 6",
-                is_active=True,
-                participant_count=1,  # Current user
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc)
-            )
-
-            result = await db.chat_rooms.insert_one(chat_room.dict(by_alias=True))
-            room_id = str(result.inserted_id)
-
-            # Save the initial message
-            chat_message = ChatMessage(
-                session_id=room_id,
-                user_id=chat_id,
-                message_text=text,
-                created_at=datetime.now(timezone.utc)
-            )
-            await db.chat_messages.insert_one(chat_message.dict(by_alias=True))
-
-            # Return a special response type for GTA 6 chat
-            return {
-                "type": "gta6_chat",
-                "data": {
-                    "session_id": room_id,
-                    "message": f"Welcome to the GTA 6 chat dimension! You're the first to join this chat. Your message: '{text}'",
-                    "participant_count": 1
-                }
+                "type": "relay_message",
+                "data": {"recipient_id": recipient_id, "message_text": text},
             }
 
     # Handle /start command
@@ -1088,6 +1068,76 @@ async def process_telegram_message(chat_id: int, text: str, background_tasks: Op
                 "step": 1,
                 "message": "Welcome to seller onboarding! Let's get you set up as a verified seller. What's your display name? (e.g., 'Mama Mboga Nairobi')"
             }
+        }
+
+    # Handle ACCEPT / DECLINE replies from grocers to chat requests
+    if text.upper().startswith("ACCEPT ") or text.upper().startswith("DECLINE "):
+        db = await get_database()
+        parts = text.split(maxsplit=1)
+        if len(parts) != 2:
+            return {"type": "not_found", "data": {"message": "Usage: ACCEPT <request_id> or DECLINE <request_id>"}}
+
+        action, request_id_str = parts[0].upper(), parts[1].strip()
+
+        try:
+            request_oid = ObjectId(request_id_str)
+        except Exception:
+            return {"type": "not_found", "data": {"message": "That request ID doesn't look right."}}
+
+        chat_request = await db.chat_requests.find_one({"_id": request_oid})
+        if not chat_request:
+            return {"type": "not_found", "data": {"message": "That request no longer exists."}}
+
+        grocer = await db.grocers.find_one({"_id": ObjectId(chat_request["grocer_id"])})
+        if not grocer or grocer.get("telegram_user_id") != chat_id:
+            # Whoever is replying isn't the grocer this request was sent to.
+            return {"type": "not_found", "data": {"message": "This request isn't yours to respond to."}}
+
+        if chat_request.get("expires_at") and chat_request["expires_at"] < datetime.now(timezone.utc):
+            await db.chat_requests.update_one(
+                {"_id": request_oid, "status": "pending"}, {"$set": {"status": "expired"}}
+            )
+            return {"type": "not_found", "data": {"message": "That request has expired."}}
+
+        if action == "DECLINE":
+            result = await db.chat_requests.update_one(
+                {"_id": request_oid, "status": "pending"},
+                {"$set": {"status": "declined", "responded_at": datetime.now(timezone.utc)}},
+            )
+            if result.modified_count == 0:
+                return {"type": "not_found", "data": {"message": "That request was already responded to."}}
+            return {"type": "request_declined", "data": {"buyer_user_id": chat_request["buyer_user_id"]}}
+
+        # ACCEPT — atomic compare-and-swap: only the first accept for this
+        # request wins the race if it somehow gets triggered twice.
+        result = await db.chat_requests.update_one(
+            {"_id": request_oid, "status": "pending"},
+            {"$set": {"status": "accepted", "responded_at": datetime.now(timezone.utc)}},
+        )
+        if result.modified_count == 0:
+            return {"type": "not_found", "data": {"message": "That request was already responded to."}}
+
+        session = ChatSession(
+            request_id=str(request_oid),
+            buyer_user_id=chat_request["buyer_user_id"],
+            grocer_id=chat_request["grocer_id"],
+            grocer_telegram_user_id=chat_id,
+            status="active",
+        )
+        try:
+            session_result = await db.chat_sessions.insert_one(session.dict(by_alias=True))
+        except DuplicateKeyError:
+            # Partial-unique index caught a genuine race: an active session
+            # already exists for this buyer/grocer pair.
+            return {"type": "not_found", "data": {"message": "You already have an active chat with this buyer."}}
+
+        return {
+            "type": "request_accepted",
+            "data": {
+                "buyer_user_id": chat_request["buyer_user_id"],
+                "grocer_name": grocer["display_name"],
+                "session_id": str(session_result.inserted_id),
+            },
         }
 
     # Handle phase B: seller discovery trigger phrases
@@ -1148,8 +1198,8 @@ async def process_telegram_message(chat_id: int, text: str, background_tasks: Op
         if category_filter:
             query["categories"] = {"$in": [category_filter]}
 
-        # Find matching grocers (limit to 10 for display)
-        grocers_cursor = db.grocers.find(query).limit(10)
+        # Find matching grocers, ranked by credibility (limit to 10 for display)
+        grocers_cursor = db.grocers.find(query).sort("credibility_score", -1).limit(10)
         grocers = await grocers_cursor.to_list(length=10)
 
         if not grocers:
@@ -1179,10 +1229,21 @@ async def process_telegram_message(chat_id: int, text: str, background_tasks: Op
 
         seller_list_text += "\nReply with the number of the seller you'd like to contact (e.g., '1')"
 
-        # Store the search results in temporary context for the next step
-        # In a real app, we'd use a proper session/store, but for simplicity we'll
-        # encode the search parameters in a way we can retrieve them
-        # For now, we'll just return the data and handle selection in the webhook
+        # Save exactly which grocers were shown, in this order, so a numeric
+        # reply resolves to what the buyer actually saw, not a fresh re-query.
+        await db.discovery_search_context.update_one(
+            {"buyer_user_id": chat_id},
+            {"$set": {
+                "buyer_user_id": chat_id,
+                "grocer_ids": [str(g["_id"]) for g in grocers],
+                "search_term": search_term,
+                "location_filter": location_filter,
+                "category_filter": category_filter,
+                "created_at": datetime.now(timezone.utc),
+                "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
+            }},
+            upsert=True,
+        )
 
         return {
             "type": "seller_discovery_results",
@@ -1196,58 +1257,57 @@ async def process_telegram_message(chat_id: int, text: str, background_tasks: Op
         }
 
     # Handle seller selection (when user replies with a number after seeing seller results)
-    # This would be handled by checking if we have recent seller search context
-    # For simplicity in this implementation, we'll check if the message is just a number
-    # and if there was a recent seller search (in a real app, we'd store this in user session)
     elif text.strip().isdigit():
-        # Check if this looks like a seller selection (simple heuristic)
-        # In a real implementation, we'd store the search context in a user session
         choice_num = int(text.strip())
-        if 1 <= choice_num <= 10:  # Reasonable range for a list of sellers
-            # We would normally look up the user's recent search, but for simplicity
-            # we'll just acknowledge the selection and simulate the next step
-            # A proper implementation would store the search results in a temporary
-            # collection or cache keyed by user ID
+        db = await get_database()
 
-            # For now, let's return a placeholder indicating selection was received
-            # In a complete implementation, this would:
-            # 1. Retrieve the stored search results for this user
-            # 2. Select the chosen seller
-            # 3. Create a ChatRequest document
-            # 4. Notify the seller of the request
+        search_context = await db.discovery_search_context.find_one({"buyer_user_id": chat_id})
 
-            return {
-                "type": "seller_selection",
-                "data": {
-                    "selected_index": choice_num - 1,  # Zero-based index
-                    "message": f"You selected option {choice_num}. Please wait while we connect you with the seller...",
-                    "note": "In a full implementation, this would create a chat request and notify the seller."
-                }
-            }
+        if not search_context or search_context["expires_at"] < datetime.now(timezone.utc):
+            return {"type": "not_found", "data": {"message": "That selection has expired. Please search for sellers again."}}
 
-    # Handle actual seller selection with context (simplified implementation)
-    # In a real app, we would store search context in a user session or temporary collection
-    # For this implementation, we'll check if the user recently performed a seller search
-    # by looking for recent seller_discovery_results in their query log (simplified)
-    elif text.strip().isdigit() and len(text.strip()) <= 2:  # Likely a selection number
-        choice_num = int(text.strip())
-        if 1 <= choice_num <= 10:
-            # In a full implementation, we would:
-            # 1. Retrieve the user's last seller search from a session store
-            # 2. Get the selected seller from that search
-            # 3. Create a ChatRequest
-            # 4. Notify the seller
+        grocer_ids = search_context.get("grocer_ids", [])
+        index = choice_num - 1
+        if index < 0 or index >= len(grocer_ids):
+            return {"type": "not_found", "data": {"message": f"Please reply with a number between 1 and {len(grocer_ids)}."}}
 
-            # For this demo, we'll simulate the process by creating a mock request
-            # In reality, you'd want to store search context per user
+        grocer = await db.grocers.find_one({"_id": ObjectId(grocer_ids[index])})
+        if not grocer:
+            return {"type": "not_found", "data": {"message": "Sorry, that seller is no longer available. Please search again."}}
 
-            return {
-                "type": "seller_selection_processing",
-                "data": {
-                    "selected_index": choice_num - 1,
-                    "message": f"You selected option {choice_num}. Processing your request..."
-                }
-            }
+        chat_request = ChatRequest(
+            buyer_user_id=chat_id,
+            grocer_id=str(grocer["_id"]),
+            status="pending",
+            buyer_message="Hello! I'm interested in your products.",
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        )
+
+        try:
+            result = await db.chat_requests.insert_one(chat_request.dict(by_alias=True))
+        except DuplicateKeyError:
+            return {"type": "not_found", "data": {"message": f"You already have a pending request with {grocer['display_name']}. Wait for them to respond."}}
+
+        request_id = str(result.inserted_id)
+
+        return {
+            "type": "chat_request_created",
+            "data": {
+                "request_id": request_id,
+                "buyer_message": (
+                    f"Your request to connect with {grocer['display_name']} has been sent! "
+                    f"They have 10 minutes to respond. You'll be notified when they do."
+                ),
+                "grocer_telegram_user_id": grocer["telegram_user_id"],
+                "grocer_message": (
+                    f"New chat request!\n\nA buyer is interested in connecting with you.\n"
+                    f"Your response is needed within 10 minutes.\n\n"
+                    f"To accept, reply: ACCEPT {request_id}\n"
+                    f"To decline, reply: DECLINE {request_id}"
+                ),
+            },
+        }
 
     # Handle /end command to end chat sessions (buyer or grocer)
     if text.startswith("/end"):
@@ -1507,16 +1567,10 @@ async def telegram_webhook(
         send_telegram_text(chat_id, welcome_text)
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
-    # Handle GTA 6 chat dimension
-    if processed["type"] == "gta6_chat":
+    # Handle message relay inside an active session
+    if processed["type"] == "relay_message":
         data = processed["data"]
-        message = (
-            f"🎮 GTA 6 Chat Dimension 🎮\n\n"
-            f"{data['message']}\n\n"
-            f"Participants in this chat: {data['participant_count']}\n\n"
-            f"To leave this chat dimension, simply type any other query or command."
-        )
-        send_telegram_text(chat_id, message)
+        send_telegram_text(data["recipient_id"], data["message_text"])
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
     # Handle sell onboarding
@@ -1562,85 +1616,23 @@ async def telegram_webhook(
         send_telegram_text(chat_id, message)
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
-    # Handle seller selection
-    if processed["type"] == "seller_selection":
+    # Handle chat request created
+    if processed["type"] == "chat_request_created":
         data = processed["data"]
-        message = data["message"]
-        note = data.get("note", "")
-        if note:
-            message += f"\n\n💡 {note}"
-        send_telegram_text(chat_id, message)
+        send_telegram_text(chat_id, data["buyer_message"])
+        send_telegram_text(data["grocer_telegram_user_id"], data["grocer_message"])
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
-    # Handle seller selection processing (create chat request and notify seller)
-    if processed["type"] == "seller_selection_processing":
+    # Handle declined chat request
+    if processed["type"] == "request_declined":
+        send_telegram_text(processed["data"]["buyer_user_id"], "Sorry — the seller isn't available to chat right now.")
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle accepted chat request
+    if processed["type"] == "request_accepted":
         data = processed["data"]
-        selected_index = data["selected_index"]
-
-        # Get database connection
-        db = await get_database()
-
-        # TODO: In a real implementation, we would retrieve the user's search context
-        # For now, we'll simulate by getting some verified grocers
-        # In production, you would store search context per user (e.g., in a session store or temporary collection)
-
-        # Get some verified grocers to simulate search results
-        grocers_cursor = db.grocers.find({
-            "verification_status": "verified",
-            "opted_in_visible": True,
-            "is_banned": False
-        }).limit(10)
-        grocers = await grocers_cursor.to_list(length=10)
-
-        if not grocers or selected_index >= len(grocers):
-            # Invalid selection or no grocers found
-            await send_telegram_text(chat_id, "Sorry, there was an error processing your selection. Please try searching again.")
-            return JSONResponse(status_code=200, content={"status": "accepted"})
-
-        # Get the selected grocer
-        selected_grocer = grocers[selected_index]
-
-        # Create a chat request
-        from datetime import datetime, timedelta
-
-        chat_request = ChatRequest(
-            buyer_user_id=chat_id,
-            grocer_id=str(selected_grocer["_id"]),
-            status="pending",
-            buyer_message=f"Hello! I'm interested in your products. Let's discuss pricing and availability.",
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
-            responded_at=None
-        )
-
-        # Insert the chat request
-        result = await db.chat_requests.insert_one(chat_request.dict(by_alias=True))
-        request_id = str(result.inserted_id)
-
-        # Notify the buyer that the request has been sent
-        buyer_message = (
-            f"Your request to connect with {selected_grocer['display_name']} has been sent! "
-            f"They have 10 minutes to respond.\n\n"
-            f"You'll be notified when they respond."
-        )
-        await send_telegram_text(chat_id, buyer_message)
-
-        # Notify the seller (grocer) about the request
-        # In a real implementation, we would send a message to the grocer's Telegram ID
-        # For now, we'll log it and note that this would be implemented
-        seller_notification = (
-            f"New chat request!\n\n"
-            f"A buyer is interested in connecting with you.\n"
-            f"Your response is needed within 10 minutes.\n\n"
-            f"To accept, reply with: ACCEPT {request_id}\n"
-            f"To decline, reply with: DECLINE {request_id}"
-        )
-
-        # In a real implementation, we would send this to the grocer's telegram_user_id
-        # await send_telegram_text(selected_grocer["telegram_user_id"], seller_notification)
-        # For now, we'll just log it
-        logger.info(f"Would send to grocer {selected_grocer['telegram_user_id']}: {seller_notification}")
-
+        send_telegram_text(data["buyer_user_id"], f"{data['grocer_name']} accepted! You're now connected — send your message.")
+        send_telegram_text(chat_id, "Chat started. Send /end anytime to finish.")
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
     # Handle chat ended

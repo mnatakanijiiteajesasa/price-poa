@@ -5,7 +5,7 @@ services:
     container_name: pricepoa_mongo
     # Single-node replica set: multi-document transactions AND Change Streams
     # (used by the embedding outbox) both require a replica set.
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -15,6 +15,7 @@ services:
     volumes:
       - mongo_data:/data/db
       - mongo_config:/data/configdb
+      - ./mongo-keyfile:/etc/mongo-keyfile
     networks:
       - pricepoa_network
     healthcheck:
@@ -35,19 +36,16 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - ./mongo-init/init-replica.js:/init-replica.js:ro
     entrypoint: ["/bin/bash", "-c"]
     command: >
       set -e;
       echo "Waiting for mongod...";
       until mongosh --host mongo --username "$${MONGO_INITDB_ROOT_USERNAME}" --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --quiet --eval "db.runCommand({ping:1}).ok" >/dev/null 2>&1; do sleep 2; done;
-      mongosh --host mongo --username "$${MONGO_INITDB_ROOT_USERNAME}" --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --quiet --eval "
-      var status = db.runCommand({replSetGetStatus:1});
-      if (status.ok) { print('Replica set rs0 already initialised'); }
-      else { rs.initiate({_id:'rs0', members:[{_id:0, host:'mongo:27017'}]}); print('Replica set rs0 initiated'); }
-      ";
+      mongosh --host mongo --username "$${MONGO_INITDB_ROOT_USERNAME}" --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --quiet /init-replica.js;
     networks:
       - pricepoa_network
-
   # MONGO-EXPRESS (Dev Admin UI)
   mongo-express:
     image: mongo-express:latest

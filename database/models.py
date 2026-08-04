@@ -318,36 +318,6 @@ QUERY_LOG_INDEXES = [
 ]
 
 
-# Chat Session Schema
-class ChatRoom(BaseModel):
-    """Chat room schema for the chat_rooms collection (topic-based group chat, e.g. 'GTA 6')."""
-    topic: str = Field(..., min_length=1, max_length=200, description="Chat room topic (e.g., 'GTA 6')")
-    description: Optional[str] = Field(None, max_length=500, description="Description of the chat room")
-    is_active: bool = Field(default=True, description="Whether chat room is currently active")
-    participant_count: int = Field(default=0, description="Number of participants in the room")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    @validator('topic')
-    def topic_must_not_be_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError('Topic cannot be empty')
-        return v.strip()
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-        schema_extra = {
-            "example": {
-                "topic": "GTA 6",
-                "description": "Chat about Grand Theft Auto 6",
-                "is_active": True,
-                "participant_count": 5
-            }
-        }
-
-
 # Chat Message Schema
 class ChatMessage(BaseModel):
     """Chat message schema for the chat_messages collection."""
@@ -384,15 +354,23 @@ class ChatMessage(BaseModel):
 CHAT_SESSION_VALIDATOR = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["buyer_user_id", "grocer_id"],
+        "required": ["request_id", "buyer_user_id", "grocer_id", "grocer_telegram_user_id"],
         "properties": {
+            "request_id": {
+                "bsonType": "string",
+                "description": "The ChatRequest this session was created from"
+            },
             "buyer_user_id": {
-                "bsonType": "int",
+                "bsonType": ["int", "long"],
                 "description": "Telegram user ID of the buyer - must be an integer and is required"
             },
             "grocer_id": {
                 "bsonType": "string",
                 "description": "Reference to grocer document ID - must be a string and is required"
+            },
+            "grocer_telegram_user_id": {
+                "bsonType": ["int", "long"],
+                "description": "Telegram user ID of the grocer - denormalized for fast lookups"
             },
             "status": {
                 "bsonType": "string",
@@ -414,40 +392,6 @@ CHAT_SESSION_VALIDATOR = {
     }
 }
 
-CHAT_ROOM_VALIDATOR = {
-    "$jsonSchema": {
-        "bsonType": "object",
-        "required": ["topic"],
-        "properties": {
-            "topic": {
-                "bsonType": "string",
-                "description": "Chat room topic - must be a string and is required"
-            },
-            "description": {
-                "bsonType": "string",
-                "description": "Description of the chat room"
-            },
-            "is_active": {
-                "bsonType": "bool",
-                "description": "Whether chat room is currently active"
-            },
-            "participant_count": {
-                "bsonType": "int",
-                "minimum": 0,
-                "description": "Number of participants in the room"
-            },
-            "created_at": {
-                "bsonType": "date",
-                "description": "Timestamp when chat room was created"
-            },
-            "updated_at": {
-                "bsonType": "date",
-                "description": "Timestamp when chat room was last updated"
-            }
-        }
-    }
-}
-
 CHAT_MESSAGE_VALIDATOR = {
     "$jsonSchema": {
         "bsonType": "object",
@@ -458,7 +402,7 @@ CHAT_MESSAGE_VALIDATOR = {
                 "description": "Reference to chat session document ID"
             },
             "user_id": {
-                "bsonType": "int",
+                "bsonType": ["int", "long"],
                 "description": "Telegram user ID of the sender"
             },
             "message_text": {
@@ -481,14 +425,6 @@ CHAT_MESSAGE_VALIDATOR = {
         }
     }
 }
-
-# Index definitions for chat room collections
-CHAT_ROOM_INDEXES = [
-    ([("topic", 1)], {"unique": False}),
-    ([("is_active", 1)], {"unique": False}),
-    ([("created_at", -1)], {"unique": False}),  # Descending for recent-first queries
-]
-
 
 # Grocer Schema (individual sellers/vendors like mama mbogas)
 class Grocer(BaseModel):
@@ -591,7 +527,7 @@ GROCER_VALIDATOR = {
         "required": ["telegram_user_id", "display_name", "town"],
         "properties": {
             "telegram_user_id": {
-                "bsonType": "int",
+                "bsonType": ["int", "long"],
                 "description": "Telegram user ID of the grocer - must be an integer and is required"
             },
             "display_name": {
@@ -676,7 +612,7 @@ GROCER_REVIEW_VALIDATOR = {
                 "description": "Reference to grocer document ID - must be a string and is required"
             },
             "reviewer_user_id": {
-                "bsonType": "int",
+                "bsonType": ["int", "long"],
                 "description": "Telegram user ID of the reviewer - must be an integer and is required"
             },
             "rating": {
@@ -741,21 +677,42 @@ class ChatRequest(BaseModel):
         }
 
 
+class DiscoverySearchContext(BaseModel):
+    """
+    The exact ranked seller list most recently shown to a buyer, so a
+    numeric reply ("2") resolves to the grocer they actually saw rather
+    than a fresh, possibly-different, re-query.
+    """
+    buyer_user_id: int = Field(..., description="Telegram user ID of the buyer")
+    grocer_ids: List[str] = Field(..., description="Ranked order, index 0 == option '1'")
+    search_term: Optional[str] = None
+    location_filter: Optional[str] = None
+    category_filter: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
 
 # Updated Chat Session Schema (more general purpose for buyer-seller chats)
 class ChatSession(BaseModel):
     """Chat session schema for the chat_sessions collection."""
+    request_id: str = Field(..., description="The ChatRequest this session was created from")
     buyer_user_id: int = Field(..., description="Telegram user ID of the buyer")
     grocer_id: str = Field(..., description="Reference to grocer document ID")
+    grocer_telegram_user_id: int = Field(..., description="Denormalized for fast relay/role lookups")
     status: str = Field(default="active", description="Session status: active, ended_by_buyer, ended_by_grocer, expired")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     ended_at: Optional[datetime] = Field(None, description="When the session was ended")
 
-    @validator('buyer_user_id')
-    def buyer_user_id_must_be_positive(cls, v):
+    @validator('buyer_user_id', 'grocer_telegram_user_id')
+    def positive_id(cls, v):
         if v <= 0:
-            raise ValueError('Buyer user ID must be positive')
+            raise ValueError('Telegram user ID must be positive')
         return v
 
     @validator('status')
@@ -797,6 +754,7 @@ GROCER_REVIEW_INDEXES = [
     ([("reviewer_user_id", 1)], {"unique": False}),
     ([("created_at", -1)], {"unique": False}),  # Descending for recent-first queries
     ([("grocer_id", 1), ("created_at", -1)], {"unique": False}),  # For grocer-specific reviews over time
+    ([("session_id", 1)], {"unique": True}),  # one review per completed session
 ]
 
 CHAT_REQUEST_INDEXES = [
@@ -807,20 +765,38 @@ CHAT_REQUEST_INDEXES = [
     ([("expires_at", 1)], {"unique": False}),  # For expiring old requests
     ([("buyer_user_id", 1), ("status", 1)], {"unique": False}),  # For user's pending requests
     ([("grocer_id", 1), ("status", 1)], {"unique": False}),  # For grocer's incoming requests
+    # Only one PENDING request per buyer/grocer pair at a time.
+    (
+        [("buyer_user_id", 1), ("grocer_id", 1)],
+        {"unique": True, "partialFilterExpression": {"status": "pending"}},
+    ),
 ]
 
 # Update CHAT_SESSION_INDEXES to include buyer/grocer indices
 CHAT_SESSION_INDEXES = [
     ([("buyer_user_id", 1)], {"unique": False}),
     ([("grocer_id", 1)], {"unique": False}),
+    ([("grocer_telegram_user_id", 1)], {"unique": False}),
     ([("status", 1)], {"unique": False}),
     ([("created_at", -1)], {"unique": False}),  # Descending for recent-first queries
-    ([("buyer_user_id", 1), ("grocer_id", 1)], {"unique": False}),  # Prevent duplicate active sessions between same pair
+    ([("request_id", 1)], {"unique": True}),
+    # Partial-unique: only one ACTIVE session per buyer/grocer pair. This is
+    # what actually makes the DuplicateKeyError in the ACCEPT handler mean
+    # something — a plain index (the old version here) enforces nothing.
+    (
+        [("buyer_user_id", 1), ("grocer_id", 1)],
+        {"unique": True, "partialFilterExpression": {"status": "active"}},
+    ),
 ]
 
 CHAT_MESSAGE_INDEXES = [
     ([("session_id", 1)], {"unique": False}),
     ([("user_id", 1)], {"unique": False}),
     ([("created_at", -1)], {"unique": False}),  # Descending for recent-first queries
-    ([("session_id", 1), ("created_at", -1)], {"unique": False}),  # For session-specific queries over time
+    ([("session_id", 1), ("created_at", 1)], {"unique": False}),  # ascending — chronological replay within a session
+]
+
+DISCOVERY_CONTEXT_INDEXES = [
+    ([("buyer_user_id", 1)], {"unique": True}),  # one live search context per buyer, overwritten each search
+    ([("expires_at", 1)], {"unique": False}),
 ]
