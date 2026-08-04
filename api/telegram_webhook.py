@@ -7,12 +7,11 @@ from fastapi import APIRouter, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 import logging
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
 from infographics.generator import (
-    generate_single_product_image,
     generate_shopping_list_image,
     generate_product_options_image,
 )
@@ -20,6 +19,7 @@ from query_engine import get_product_prices, find_product_matches
 from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_fuzzy
 from query_engine import find_product
+from database.models import ChatSession, ChatMessage, Grocer, ChatRequest
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -607,6 +607,81 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
     """
     logger.info(f"Processing message from {chat_id}: {text}")
 
+    # Handle GTA 6 special chat dimension
+    text_lower = text.lower().strip()
+    if text_lower in ["gta 6", "gta6", "grand theft auto 6", "grand theft auto six"]:
+        # Check if there's an active GTA 6 chat session
+        db = await get_database()
+
+        # Look for existing active GTA 6 session
+        existing_session = await db.chat_sessions.find_one({
+            "topic": {"$regex": "^gta 6$", "$options": "i"},
+            "is_active": True
+        })
+
+        if existing_session:
+            # Join existing session
+            session_id = str(existing_session["_id"])
+
+            # Add user as participant if not already counted
+            # For simplicity, we'll just increment participant count (in a real app,
+            # we'd check if user is already in the session)
+            await db.chat_sessions.update_one(
+                {"_id": ObjectId(session_id)},
+                {"$inc": {"participant_count": 1}, "$set": {"updated_at": datetime.now(timezone.utc)}}
+            )
+
+            # Save the message to the chat session
+            chat_message = ChatMessage(
+                session_id=session_id,
+                user_id=chat_id,
+                message_text=text,
+                created_at=datetime.now(timezone.utc)
+            )
+            await db.chat_messages.insert_one(chat_message.dict(by_alias=True))
+
+            # Return a special response type for GTA 6 chat
+            return {
+                "type": "gta6_chat",
+                "data": {
+                    "session_id": session_id,
+                    "message": f"Welcome to the GTA 6 chat dimension! You're now chatting with other GTA 6 enthusiasts. Your message: '{text}'",
+                    "participant_count": existing_session["participant_count"] + 1
+                }
+            }
+        else:
+            # Create new GTA 6 chat session
+            chat_session = ChatSession(
+                topic="GTA 6",
+                description="Chat room for discussing Grand Theft Auto 6",
+                is_active=True,
+                participant_count=1,  # Current user
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+
+            result = await db.chat_sessions.insert_one(chat_session.dict(by_alias=True))
+            session_id = str(result.inserted_id)
+
+            # Save the initial message
+            chat_message = ChatMessage(
+                session_id=session_id,
+                user_id=chat_id,
+                message_text=text,
+                created_at=datetime.now(timezone.utc)
+            )
+            await db.chat_messages.insert_one(chat_message.dict(by_alias=True))
+
+            # Return a special response type for GTA 6 chat
+            return {
+                "type": "gta6_chat",
+                "data": {
+                    "session_id": session_id,
+                    "message": f"Welcome to the GTA 6 chat dimension! You're the first to join this chat. Your message: '{text}'",
+                    "participant_count": 1
+                }
+            }
+
     # Handle /start command
     if text.startswith("/start"):
         # Return a special response type for start command
@@ -615,8 +690,233 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
             "data": {}
         }
 
+    # Handle /sell command for seller onboarding
+    if text.startswith("/sell"):
+        return {
+            "type": "sell_onboarding",
+            "data": {
+                "step": 1,
+                "message": "Welcome to seller onboarding! Let's get you set up as a verified seller. What's your display name? (e.g., 'Mama Mboga Nairobi')"
+            }
+        }
+
+    # Handle phase B: seller discovery trigger phrases
+    # Check if message starts with trigger phrases for seller discovery
+    trigger_phrases = ["sell ", "sell:", "where to buy ", "where to buy:", "find seller ", "find seller:"]
+    is_seller_discovery = any(text_lower.startswith(phrase) for phrase in trigger_phrases)
+
+    if is_seller_discovery:
+        # Extract the product/search term after the trigger phrase
+        search_term = text_lower
+        for phrase in trigger_phrases:
+            if text_lower.startswith(phrase):
+                search_term = text_lower[len(phrase):].strip()
+                break
+
+        # If there's a trailing location/category filter (e.g., "in Nairobi" or "for vegetables")
+        # We'll parse simple prepositions
+        location_filter = None
+        category_filter = None
+
+        # Simple parsing for common patterns
+        if " in " in search_term:
+            parts = search_term.split(" in ")
+            search_term = parts[0].strip()
+            location_filter = parts[1].strip()
+        elif " for " in search_term:
+            parts = search_term.split(" for ")
+            search_term = parts[0].strip()
+            category_filter = parts[1].strip()
+
+        # Perform seller discovery
+        db = await get_database()
+
+        # Build query for verified, opted-in grocers
+        query = {
+            "verification_status": "verified",
+            "opted_in_visible": True,
+            "is_banned": False
+        }
+
+        # Add text search on display_name, description, or categories
+        if search_term:
+            # For simplicity, we'll do a text search on display_name and description
+            # In a real app, we'd use text indexes or more sophisticated search
+            search_regex = {"$regex": search_term, "$options": "i"}
+            query["$or"] = [
+                {"display_name": search_regex},
+                {"description": search_regex},
+                {"categories": {"$in": [search_term]}}  # Exact match on category
+            ]
+
+        # Add location filter if specified
+        if location_filter:
+            location_regex = {"$regex": location_filter, "$options": "i"}
+            query["town"] = location_regex
+
+        # Add category filter if specified
+        if category_filter:
+            query["categories"] = {"$in": [category_filter]}
+
+        # Find matching grocers (limit to 10 for display)
+        grocers_cursor = db.grocers.find(query).limit(10)
+        grocers = await grocers_cursor.to_list(length=10)
+
+        if not grocers:
+            # No sellers found
+            return {
+                "type": "seller_discovery_results",
+                "data": {
+                    "message": f"No verified sellers found for '{search_term}'{' in ' + location_filter if location_filter else ''}{' for ' + category_filter if category_filter else ''}.\n\nTry a different search term or check spelling.",
+                    "sellers": []
+                }
+            }
+
+        # Format results for display (we'll use a simple text format for now)
+        # In a real implementation, we might generate an image or use inline keyboards
+        seller_list_text = f"Found {len(grocers)} verified seller(s) for '{search_term}'"
+        if location_filter:
+            seller_list_text += f" in {location_filter}"
+        if category_filter:
+            seller_list_text += f" selling {category_filter}"
+        seller_list_text += ":\n\n"
+
+        for i, grocer in enumerate(grocers, 1):
+            seller_list_text += f"{i}. {grocer['display_name']} "
+            if 'town' in grocer:
+                seller_list_text += f"({grocer['town']}) "
+            seller_list_text += f"- Rating: {grocer.get('rating_average', 0):.1f}/5 ({grocer.get('review_count', 0)} reviews)\n"
+
+        seller_list_text += "\nReply with the number of the seller you'd like to contact (e.g., '1')"
+
+        # Store the search results in temporary context for the next step
+        # In a real app, we'd use a proper session/store, but for simplicity we'll
+        # encode the search parameters in a way we can retrieve them
+        # For now, we'll just return the data and handle selection in the webhook
+
+        return {
+            "type": "seller_discovery_results",
+            "data": {
+                "message": seller_list_text,
+                "sellers": grocers,
+                "search_term": search_term,
+                "location_filter": location_filter,
+                "category_filter": category_filter
+            }
+        }
+
+    # Handle seller selection (when user replies with a number after seeing seller results)
+    # This would be handled by checking if we have recent seller search context
+    # For simplicity in this implementation, we'll check if the message is just a number
+    # and if there was a recent seller search (in a real app, we'd store this in user session)
+    elif text.strip().isdigit():
+        # Check if this looks like a seller selection (simple heuristic)
+        # In a real implementation, we'd store the search context in a user session
+        choice_num = int(text.strip())
+        if 1 <= choice_num <= 10:  # Reasonable range for a list of sellers
+            # We would normally look up the user's recent search, but for simplicity
+            # we'll just acknowledge the selection and simulate the next step
+            # A proper implementation would store the search results in a temporary
+            # collection or cache keyed by user ID
+
+            # For now, let's return a placeholder indicating selection was received
+            # In a complete implementation, this would:
+            # 1. Retrieve the stored search results for this user
+            # 2. Select the chosen seller
+            # 3. Create a ChatRequest document
+            # 4. Notify the seller of the request
+
+            return {
+                "type": "seller_selection",
+                "data": {
+                    "selected_index": choice_num - 1,  # Zero-based index
+                    "message": f"You selected option {choice_num}. Please wait while we connect you with the seller...",
+                    "note": "In a full implementation, this would create a chat request and notify the seller."
+                }
+            }
+
+    # Handle actual seller selection with context (simplified implementation)
+    # In a real app, we would store search context in a user session or temporary collection
+    # For this implementation, we'll check if the user recently performed a seller search
+    # by looking for recent seller_discovery_results in their query log (simplified)
+    elif text.strip().isdigit() and len(text.strip()) <= 2:  # Likely a selection number
+        choice_num = int(text.strip())
+        if 1 <= choice_num <= 10:
+            # In a full implementation, we would:
+            # 1. Retrieve the user's last seller search from a session store
+            # 2. Get the selected seller from that search
+            # 3. Create a ChatRequest
+            # 4. Notify the seller
+
+            # For this demo, we'll simulate the process by creating a mock request
+            # In reality, you'd want to store search context per user
+
+            return {
+                "type": "seller_selection_processing",
+                "data": {
+                    "selected_index": choice_num - 1,
+                    "message": f"You selected option {choice_num}. Processing your request..."
+                }
+            }
+
+    # Handle /end command to end chat sessions
+    if text.startswith("/end"):
+        # Check if user is in an active chat session
+        db = await get_database()
+
+        # Find active chat sessions where user is either buyer or grocer
+        # First check as buyer in ChatSession
+        chat_session = await db.chat_sessions.find_one({
+            "$or": [
+                {"buyer_user_id": chat_id},
+                # Note: We'd need to join with grocers table to check grocer's telegram_user_id
+                # For simplicity, we'll just check buyer side for now
+            ],
+            "status": "active"
+        })
+
+        if chat_session:
+            # End the session
+            await db.chat_sessions.update_one(
+                {"_id": chat_session["_id"]},
+                {"$set": {"status": "ended_by_buyer", "ended_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}}
+            )
+
+            return {
+                "type": "chat_ended",
+                "data": {
+                    "message": "Chat session ended. Thank you for using PricePoa!"
+                }
+            }
+        else:
+            # Check if user is a grocer in an active session (simplified)
+            grocer = await db.grocers.find_one({"telegram_user_id": chat_id})
+            if grocer:
+                # Find active session where this grocer is participating
+                chat_session = await db.chat_sessions.find_one({
+                    "grocer_id": str(grocer["_id"]),
+                    "status": "active"
+                })
+
+                if chat_session:
+                    await db.chat_sessions.update_one(
+                        {"_id": chat_session["_id"]},
+                        {"$set": {"status": "ended_by_grocer", "ended_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}}
+                    )
+
+                    return {
+                        "type": "chat_ended",
+                        "data": {
+                            "message": "Chat session ended. Thank you for using PricePoa!"
+                        }
+                    }
+
+            return {
+                "type": "not_found",
+                "data": {"message": "You are not currently in an active chat session."}
+            }
+
     # Enhanced logic: Check for shopping keywords OR multiple product terms
-    text_lower = text.lower()
     shopping_keywords = ["list", "basket", "shopping", "buy", "get", "shop", "market"]
 
     # Extract meaningful product terms to detect multiple products
@@ -795,6 +1095,149 @@ async def telegram_webhook(
             "Welcome to PricePoa, your ultimate shopping partner, we help you find the best prices in you area by typing the products you need or a list of your entire shopping. Let's get Shopping!🛒"
         )
         send_telegram_text(chat_id, welcome_text)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle GTA 6 chat dimension
+    if processed["type"] == "gta6_chat":
+        data = processed["data"]
+        message = (
+            f"🎮 GTA 6 Chat Dimension 🎮\n\n"
+            f"{data['message']}\n\n"
+            f"Participants in this chat: {data['participant_count']}\n\n"
+            f"To leave this chat dimension, simply type any other query or command."
+        )
+        send_telegram_text(chat_id, message)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle sell onboarding
+    if processed["type"] == "sell_onboarding":
+        data = processed["data"]
+        step = data.get("step", 1)
+        message = data["message"]
+
+        if step == 1:
+            message = (
+                "📝 SELLER ONBOARDING - STEP 1/4\n\n"
+                f"{message}\n\n"
+                "Please reply with your display name (e.g., 'Mama Mboga Nairobi', 'Fresh Fruits Vendor')"
+            )
+        elif step == 2:
+            message = (
+                "📝 SELLER ONBOARDING - STEP 2/4\n\n"
+                f"{message}\n\n"
+                "Please reply with your town/city location (e.g., 'Nairobi', 'Mombasa', 'Kisumu')"
+            )
+        elif step == 3:
+            message = (
+                "📝 SELLER ONBOARDING - STEP 3/4\n\n"
+                f"{message}\n\n"
+                "Please reply with the categories of goods you sell (comma-separated, e.g., 'vegetables, fruits, herbs')"
+            )
+        elif step == 4:
+            message = (
+                "📝 SELLER ONBOARDING - STEP 4/4\n\n"
+                f"{message}\n\n"
+                "Would you like to add a photo of your stall or ID for verification? (Reply 'yes' or 'skip')"
+            )
+        else:
+            message = "Onboarding complete! Thank you for registering as a seller."
+
+        send_telegram_text(chat_id, message)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle seller discovery results
+    if processed["type"] == "seller_discovery_results":
+        data = processed["data"]
+        message = data["message"]
+        send_telegram_text(chat_id, message)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle seller selection
+    if processed["type"] == "seller_selection":
+        data = processed["data"]
+        message = data["message"]
+        note = data.get("note", "")
+        if note:
+            message += f"\n\n💡 {note}"
+        send_telegram_text(chat_id, message)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle seller selection processing (create chat request and notify seller)
+    if processed["type"] == "seller_selection_processing":
+        data = processed["data"]
+        selected_index = data["selected_index"]
+
+        # Get database connection
+        db = await get_database()
+
+        # TODO: In a real implementation, we would retrieve the user's search context
+        # For now, we'll simulate by getting some verified grocers
+        # In production, you would store search context per user (e.g., in a session store or temporary collection)
+
+        # Get some verified grocers to simulate search results
+        grocers_cursor = db.grocers.find({
+            "verification_status": "verified",
+            "opted_in_visible": True,
+            "is_banned": False
+        }).limit(10)
+        grocers = await grocers_cursor.to_list(length=10)
+
+        if not grocers or selected_index >= len(grocers):
+            # Invalid selection or no grocers found
+            await send_telegram_text(chat_id, "Sorry, there was an error processing your selection. Please try searching again.")
+            return JSONResponse(status_code=200, content={"status": "accepted"})
+
+        # Get the selected grocer
+        selected_grocer = grocers[selected_index]
+
+        # Create a chat request
+        from datetime import datetime, timedelta
+
+        chat_request = ChatRequest(
+            buyer_user_id=chat_id,
+            grocer_id=str(selected_grocer["_id"]),
+            status="pending",
+            buyer_message=f"Hello! I'm interested in your products. Let's discuss pricing and availability.",
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+            responded_at=None
+        )
+
+        # Insert the chat request
+        result = await db.chat_requests.insert_one(chat_request.dict(by_alias=True))
+        request_id = str(result.inserted_id)
+
+        # Notify the buyer that the request has been sent
+        buyer_message = (
+            f"Your request to connect with {selected_grocer['display_name']} has been sent! "
+            f"They have 10 minutes to respond.\n\n"
+            f"You'll be notified when they respond."
+        )
+        await send_telegram_text(chat_id, buyer_message)
+
+        # Notify the seller (grocer) about the request
+        # In a real implementation, we would send a message to the grocer's Telegram ID
+        # For now, we'll log it and note that this would be implemented
+        seller_notification = (
+            f"New chat request!\n\n"
+            f"A buyer is interested in connecting with you.\n"
+            f"Your response is needed within 10 minutes.\n\n"
+            f"To accept, reply with: ACCEPT {request_id}\n"
+            f"To decline, reply with: DECLINE {request_id}"
+        )
+
+        # In a real implementation, we would send this to the grocer's telegram_user_id
+        # await send_telegram_text(selected_grocer["telegram_user_id"], seller_notification)
+        # For now, we'll just log it
+        logger.info(f"Would send to grocer {selected_grocer['telegram_user_id']}: {seller_notification}")
+
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
+    # Handle chat ended
+    if processed["type"] == "chat_ended":
+        data = processed["data"]
+        message = data["message"]
+        send_telegram_text(chat_id, message)
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
     # Generate the infographic
