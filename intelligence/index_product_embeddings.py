@@ -1,6 +1,6 @@
 """
 Product embedding indexing module for the intelligence service.
-Handles indexing of product names and aliases into Qdrant vector database.
+Updated to use the enhanced search pipeline with rich product representations.
 """
 
 import os
@@ -9,13 +9,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timezone
 
 from motor.motor_asyncio import AsyncIOMotorClient
-from qdrant_client import QdrantClient
-from qdrant_client.http import models as rest
-from qdrant_client.http.models import PointStruct
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
-import asyncio
-import hashlib
 
 # Load environment variables
 load_dotenv()
@@ -26,215 +20,222 @@ logger = logging.getLogger(__name__)
 # Configuration
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://host.docker.internal:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "pricepoa")
-QDRANT_HOST = os.getenv("QDRANT_HOST", "host.docker.internal")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-COLLECTION_NAME = "product_embeddings"
-VECTOR_SIZE = 384  # all-MiniLM-L6-v2 dimension
-MODEL_NAME = 'all-MiniLM-L6-v2'
-BATCH_SIZE = 100
 
-class ProductEmbeddingIndexer:
-    def __init__(self):
-        self.mongo_client = None
-        self.db = None
-        self.qdrant_client = None
-        self.model = None
+async def index_products_with_enhanced_pipeline():
+    """
+    Index products using the enhanced search pipeline with rich representations.
+    This is the recommended approach for the new search system.
+    """
+    try:
+        # Import the enhanced vector search service
+        from intelligence.nlp.search_pipeline.vector_search import EnhancedVectorSearchService
 
-    async def initialize(self):
-        """Initialize MongoDB, Qdrant connections and load model."""
-        try:
-            # Initialize MongoDB
-            self.mongo_client = AsyncIOMotorClient(MONGODB_URI)
-            self.db = self.mongo_client[MONGODB_DB]
-            # Test connection
-            await self.mongo_client.admin.command('ping')
-            logger.info(f"Connected to MongoDB: {MONGODB_URI}")
+        # Connect to MongoDB
+        mongo_client = AsyncIOMotorClient(MONGODB_URI)
+        db = mongo_client[MONGODB_DB]
 
-            # Initialize Qdrant
-            self.qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-            # Test connection
-            self.qdrant_client.get_collections()
-            logger.info(f"Connected to Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
+        # Test connections
+        await mongo_client.admin.command('ping')
+        logger.info(f"Connected to MongoDB: {MONGODB_URI}")
 
-            # Ensure collection exists
-            self._ensure_collection()
+        # Initialize the enhanced vector search service
+        vector_service = EnhancedVectorSearchService()
 
-            # Load sentence transformer model
-            self.model = SentenceTransformer(MODEL_NAME)
-            logger.info(f"Loaded sentence transformer model: {MODEL_NAME}")
+        # Verify service health
+        if not vector_service.health_check():
+            logger.warning("Vector search service health check failed - checking components individually")
 
-        except Exception as e:
-            logger.error(f"Failed to initialize connections: {e}")
-            raise
+        # Fetch all products
+        products = await db.products.find({}).to_list(length=None)
+        logger.info(f"Fetched {len(products)} products from MongoDB")
 
-    def _ensure_collection(self):
-        """Ensure Qdrant collection exists with proper configuration."""
-        try:
-            collections = self.qdrant_client.get_collections().collections
-            collection_names = [col.name for col in collections]
+        if not products:
+            logger.warning("No products found to index")
+            await mongo_client.close()
+            return 0
 
-            if COLLECTION_NAME not in collection_names:
-                self.qdrant_client.create_collection(
-                    collection_name=COLLECTION_NAME,
-                    vectors_config=rest.VectorParams(
-                        size=VECTOR_SIZE,
-                        distance=rest.Distance.COSINE
-                    )
+        # Index products using the enhanced service
+        indexed_count = await vector_service.index_products_batch(products)
+        logger.info(f"Successfully indexed {indexed_count} out of {len(products)} products")
+
+        # Get collection info for verification
+        collection_info = vector_service.get_collection_info()
+        if collection_info:
+            logger.info(f"Collection info: {collection_info}")
+
+        # Cleanup
+        mongo_client.close()
+        return indexed_count
+
+    except Exception as e:
+        logger.error(f"Error in enhanced indexing process: {e}")
+        raise
+
+# Legacy function kept for backward compatibility (uses old approach)
+async def index_product_embeddings():
+    """
+    Legacy indexing function - kept for backward compatibility.
+    For new implementations, use index_products_with_enhanced_pipeline().
+    """
+    logger.warning("Using legacy indexing function. Consider upgrading to index_products_with_enhanced_pipeline()")
+
+    # Import here to avoid circular imports if modules aren't available
+    import asyncio
+    import hashlib
+    from datetime import datetime, timezone
+
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models as rest
+    from qdrant_client.http.models import PointStruct
+    from sentence_transformers import SentenceTransformer
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    logger = logging.getLogger(__name__)
+
+    # Configuration
+    MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://host.docker.internal:27017")
+    MONGODB_DB = os.getenv("MONGODB_DB", "pricepoa")
+    QDRANT_HOST = os.getenv("QDRANT_HOST", "host.docker.internal")
+    QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+    COLLECTION_NAME = "product_embeddings"
+    VECTOR_SIZE = 384
+    MODEL_NAME = 'all-MiniLM-L6-v2'
+    BATCH_SIZE = 100
+
+    try:
+        # Initialize connections
+        mongo_client = AsyncIOMotorClient(MONGODB_URI)
+        db = mongo_client[MONGODB_DB]
+        await mongo_client.admin.command('ping')
+        logger.info(f"Connected to MongoDB: {MONGODB_URI}")
+
+        qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+        qdrant_client.get_collections()
+        logger.info(f"Connected to Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
+
+        # Ensure collection exists
+        collections = qdrant_client.get_collections().collections
+        collection_names = [col.name for col in collections]
+
+        if COLLECTION_NAME not in collection_names:
+            qdrant_client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=rest.VectorParams(
+                    size=VECTOR_SIZE,
+                    distance=rest.Distance.COSINE
                 )
-                logger.info(f"Created Qdrant collection: {COLLECTION_NAME}")
-            else:
-                logger.info(f"Using existing Qdrant collection: {COLLECTION_NAME}")
+            )
+            logger.info(f"Created Qdrant collection: {COLLECTION_NAME}")
+        else:
+            logger.info(f"Using existing Qdrant collection: {COLLECTION_NAME}")
 
-        except Exception as e:
-            logger.error(f"Error ensuring Qdrant collection: {e}")
-            raise
+        # Load model
+        model = SentenceTransformer(MODEL_NAME)
+        logger.info(f"Loaded sentence transformer model: {MODEL_NAME}")
 
-    async def fetch_products(self) -> List[Dict[str, Any]]:
-        """Fetch all products from MongoDB."""
-        try:
-            products = await self.db.products.find({}).to_list(length=None)
-            logger.info(f"Fetched {len(products)} products from MongoDB")
-            return products
-        except Exception as e:
-            logger.error(f"Error fetching products from MongoDB: {e}")
-            raise
+        # Fetch products
+        products = await db.products.find({}).to_list(length=None)
+        logger.info(f"Fetched {len(products)} products from MongoDB")
 
-    def generate_variants(self, product: Dict[str, Any]) -> List[str]:
-        """
-        Generate text variants for embedding from product data.
-        Includes product name, swahili_aliases, and sheng_aliases.
-        """
-        variants = []
+        if not products:
+            logger.warning("No products found to index")
+            return 0
 
-        # Add product name
-        if product.get('name'):
-            variants.append(product['name'].strip())
+        total_indexed = 0
 
-        # Add Swahili aliases
-        swahili_aliases = product.get('swahili_aliases', [])
-        for alias in swahili_aliases:
-            if alias and alias.strip():
-                variants.append(alias.strip())
+        # Process in batches
+        for i in range(0, len(products), BATCH_SIZE):
+            batch = products[i:i + BATCH_SIZE]
+            points = []
 
-        # Add Sheng aliases
-        sheng_aliases = product.get('sheng_aliases', [])
-        for alias in sheng_aliases:
-            if alias and alias.strip():
-                variants.append(alias.strip())
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_variants = []
-        for variant in variants:
-            if variant not in seen:
-                seen.add(variant)
-                unique_variants.append(variant)
-
-        return unique_variants
-
-    def _generate_point_id(self, product_id: str, text: str) -> int:
-        """
-        Generate a deterministic point ID from product_id and text.
-        Uses hash of the combination to ensure uniqueness.
-        """
-        combined = f"{product_id}_{text}"
-        # Use hash to generate a consistent integer ID
-        hash_object = hashlib.md5(combined.encode())
-        # Convert to integer within Qdrant's ID range
-        return int(hash_object.hexdigest(), 16) % (2**63 - 1)
-
-    async def index_products(self):
-        """Main indexing process."""
-        try:
-            # Initialize connections
-            await self.initialize()
-
-            # Fetch products
-            products = await self.fetch_products()
-
-            if not products:
-                logger.warning("No products found to index")
-                return 0
-
-            total_vectors = 0
-            processed_products = 0
-
-            # Process in batches to avoid memory issues
-            for i in range(0, len(products), BATCH_SIZE):
-                batch = products[i:i + BATCH_SIZE]
-                points = []
-
-                for product in batch:
+            for product in batch:
+                try:
                     product_id = str(product.get('_id'))
                     if not product_id:
                         logger.warning(f"Product missing _id: {product}")
                         continue
 
-                    # Generate text variants
-                    variants = self.generate_variants(product)
+                    # Generate text variants (legacy approach)
+                    def generate_variants(prod):
+                        variants = []
+                        if prod.get('name'):
+                            variants.append(prod['name'].strip())
 
+                        for alias in prod.get('swahili_aliases', []):
+                            if alias and alias.strip():
+                                variants.append(alias.strip())
+
+                        for alias in prod.get('sheng_aliases', []):
+                            if alias and alias.strip():
+                                variants.append(alias.strip())
+
+                        seen = set()
+                        unique_variants = []
+                        for v in variants:
+                            if v not in seen:
+                                seen.add(v)
+                                unique_variants.append(v)
+                        return unique_variants
+
+                    variants = generate_variants(product)
                     if not variants:
                         logger.warning(f"No text variants for product {product_id}")
                         continue
 
-                    # Encode all variants for this product
-                    try:
-                        vectors = self.model.encode(variants)
+                    # Encode vectors
+                    vectors = model.encode(variants)
 
-                        # Create a point for each variant
-                        for variant, vector in zip(variants, vectors):
-                            point_id = self._generate_point_id(product_id, variant)
-                            point = PointStruct(
-                                id=point_id,
-                                vector=vector.tolist(),
-                                payload={
-                                    "product_id": product_id,
-                                    "text": variant,
-                                    "product_name": product.get('name', ''),
-                                    "indexed_at": datetime.now(timezone.utc).isoformat()
-                                }
-                            )
-                            points.append(point)
+                    # Create points
+                    for variant, vector in zip(variants, vectors):
+                        combined = f"{product_id}_{hashlib.md5(variant.encode()).hexdigest()}"
+                        point_id = abs(hash(combined)) % (2**63 - 1)
 
-                    except Exception as e:
-                        logger.error(f"Error encoding variants for product {product_id}: {e}")
-                        continue
-
-                # Upsert batch to Qdrant
-                if points:
-                    try:
-                        self.qdrant_client.upsert(
-                            collection_name=COLLECTION_NAME,
-                            points=points
+                        point = PointStruct(
+                            id=point_id,
+                            vector=vector.tolist(),
+                            payload={
+                                "product_id": product_id,
+                                "text": variant,
+                                "product_name": product.get('name', ''),
+                                "indexed_at": datetime.now(timezone.utc).isoformat()
+                            }
                         )
-                        total_vectors += len(points)
-                        processed_products += len(batch)
-                        logger.info(f"Upserted batch of {len(points)} vectors (total: {total_vectors})")
-                    except Exception as e:
-                        logger.error(f"Error upserting batch to Qdrant: {e}")
-                        continue
+                        points.append(point)
 
-            logger.info(f"Indexing complete. Total vectors indexed: {total_vectors}, Products processed: {processed_products}")
-            return total_vectors
+                except Exception as e:
+                    logger.error(f"Error processing product {product.get('_id')}: {e}")
+                    continue
 
-        except Exception as e:
-            logger.error(f"Error during indexing process: {e}")
-            raise
-        finally:
-            # Cleanup
-            if self.mongo_client:
-                self.mongo_client.close()
+            # Upsert batch
+            if points:
+                qdrant_client.upsert(
+                    collection_name=COLLECTION_NAME,
+                    points=points
+                )
+                total_indexed += len(points)
+                logger.info(f"Indexed batch of {len(points)} vectors (total: {total_indexed})")
 
-# Convenience function for external calling
-async def index_product_embeddings():
+        logger.info(f"Legacy indexing complete. Total vectors indexed: {total_indexed}")
+        return total_indexed
+
+    except Exception as e:
+        logger.error(f"Error in legacy indexing process: {e}")
+        raise
+    finally:
+        if 'mongo_client' in locals():
+            mongo_client.close()
+
+# Main entry point - use enhanced pipeline by default
+async def index_products():
     """
-    Convenience function to index product embeddings.
-    Can be called by scheduler or other services.
+    Main indexing function - uses the enhanced search pipeline.
     """
-    indexer = ProductEmbeddingIndexer()
-    return await indexer.index_products()
-
+    return await index_products_with_enhanced_pipeline()
 
 if __name__ == "__main__":
+    import asyncio
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(index_product_embeddings())
+    asyncio.run(index_products())
