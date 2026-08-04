@@ -191,8 +191,61 @@ These components are orchestrated by the `IntelligenceEngine` class in `intellig
 The intelligence components are initialized and maintained via the `initialize_intelligence` and `run_intelligence_maintenance` functions, which train/update models using recent data from the MongoDB database.
 
 ---
-## tirggering product indexer for building qdrant vectors in product_embeddings collection from mongodd products collection
-docker exec -it pricepoa_intelligence python -m index_product_embeddings
+## 6b. MongoDB ↔ Qdrant Embedding Consistency (Outbox)
+
+Product embeddings live in Qdrant's `product_embeddings` collection but their source
+of truth is MongoDB's `products`. To avoid the classic **dual-write problem** (a crash
+between the Mongo write and the Qdrant write leaving the two stores silently drifted),
+the project uses the **transactional outbox pattern**:
+
+1. When a product is created/updated, the product write **and** a pending `embeddings_outbox`
+   record are committed to MongoDB in a **single transaction**.
+2. A background worker (`intelligence/outbox/worker.py`, auto-started in the
+   `intelligence` container) tails the outbox via **Change Streams** (CDC), embeds the
+   product, pushes the vectors to Qdrant, and marks the record `processed` **only after
+   Qdrant confirms**.
+3. A periodic **reconciliation sweep** re-claims anything left pending — so if the worker
+   crashes mid-write it simply resumes on restart. Processing is **idempotent by product
+   `_id`** (Qdrant point IDs are deterministic hashes of `product_id` + variant text), so
+   re-processing never double-writes.
+
+> **⚠️ IMPORTANT — MongoDB must run as a replica set.** Transactions *and* Change Streams
+> both require one. `docker-compose.yml` now runs `mongo` with `--replSet rs0` plus a
+> `mongo-init` service that calls `rs.initiate()` once. To pick this up on an existing
+> deployment (your running Mongo is currently standalone), recreate the Mongo stack:
+> ```bash
+> sudo docker compose up -d --force-recreate mongo mongo-init
+> sudo docker compose up -d qdrant intelligence api scraper
+> ```
+
+### Viewing / driving the outbox
+
+```bash
+# Watch the worker consume the outbox (Change Stream + sweep logs)
+sudo docker compose logs -f intelligence
+
+# Backfill: enqueue every product not yet indexed (run after seeding)
+sudo docker exec -it pricepoa_intelligence python -m outbox.backfill
+
+# Force re-index of ALL products (when the model or variant logic changes)
+sudo docker exec -it pricepoa_intelligence python -m outbox.backfill --force
+
+# Inspect outbox state in mongosh
+sudo docker compose exec mongo mongosh -u pricepoa_dev -p pricepoa_dev_password --authenticationDatabase admin pricepoa --eval 'db.embeddings_outbox.aggregate([{$group:{_id:"$status",n:{$sum:1}}}])'
+```
+
+Outbox records store `intent` (`create`/`update`/`delete`/`backfill`), `status`
+(`pending`/`processing`/`processed`), an `attempts` counter, and `last_error`/`backoff_until`
+so permanent failures are retried with backoff rather than lost. Every product write the
+scraper performs (via `NormalizationPipeline`) already goes through the outbox
+transactionally; the scheduler's 6-hourly backfill catches anything written outside it.
+
+### Direct (legacy) indexer
+
+`python -m index_product_embeddings` still works as a **one-off repair tool** that writes
+straight to Qdrant without the outbox. For normal operation prefer the outbox so writes
+stay consistent.
+
 ## 7. Stop and Clean Up Services
 
 * **Stop all containers** (leaves database volumes intact):

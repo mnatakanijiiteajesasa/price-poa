@@ -16,7 +16,10 @@ from bson import ObjectId
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', 'database')))
 sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..', 'database')))
+# Repo root, so relative writers (intelligence/outbox) are importable
+sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..')))
 from connection import get_database
+from intelligence.outbox.outbox import EmbeddingOutboxService
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,8 @@ class NormalizationPipeline:
     def __init__(self):
         self.db = None
         self.buffer = []
+        # Transactional product writer: keeps MongoDB and the embedding outbox in sync
+        self.outbox = EmbeddingOutboxService()
         logger.info("NormalizationPipeline initialized")
 
     @classmethod
@@ -242,12 +247,16 @@ class NormalizationPipeline:
             update_fields["$set"] = {f"store_links.{store_id}": product_url}
 
         if product:
-            product_id = product["_id"]
+            product_id = str(product["_id"])
             if update_fields:
-                await self.db.products.update_one({"_id": product_id}, update_fields)
-            return str(product_id)
+                # Transactional: product update + outbox record commit atomically.
+                # The embedding worker re-indexes this product once Qdrant confirms.
+                await self.outbox.update_product_with_outbox(
+                    product_id, update_fields, intent="update"
+                )
+            return product_id
 
-        # Create new product record
+        # Create new product record (transactional with the embedding outbox)
         new_product = {
             "name": clean_name,
             "brand": brand,
@@ -256,11 +265,9 @@ class NormalizationPipeline:
             "swahili_aliases": [],
             "sheng_aliases": [],
             "store_links": {store_id: product_url} if product_url else {},
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc)
         }
-        res = await self.db.products.insert_one(new_product)
-        return str(res.inserted_id)
+        product_id = await self.outbox.insert_product_with_outbox(new_product, intent="create")
+        return product_id
 
     async def _save_price_record(
         self, product_id: str, store_id: str, price: float, source: str, product_url: str, is_promotional: bool, promotion_details: Optional[str]
