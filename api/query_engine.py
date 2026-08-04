@@ -1,288 +1,96 @@
 """
 query_engine.py
-Price query engine - looks up a product by name/alias, pulls matching
-prices, optionally filters by town, and returns data shaped for the
-infographic generator (see infographic/generator.py).
+Thin orchestration layer for product search using the new search pipeline.
+All search logic resides exclusively in intelligence/nlp/search_pipeline.
 """
 
-import re
 import logging
-import os
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger("uvicorn.error")
 
-# Import enhanced product matcher for fuzzy matching
-try:
-    from intelligence.nlp.product_matcher import find_product_enhanced
-    # Import rapidfuzz for direct fuzzy matching if needed
-    from rapidfuzz import fuzz, process
-except ImportError as e:
-    logger.warning(f"Could not import enhanced product matcher: {e}")
-    # Fallback functions
-    async def find_product_enhanced(db, query_text):
-        return None
-    fuzz = None
-    process = None
 
-# Import Qdrant client for vector search
-try:
-    from qdrant_client import QdrantClient
-    from qdrant_client.http import models as rest
-    from qdrant_client.http.models import PointStruct
-    QDRANT_AVAILABLE = True
-except ImportError:
-    QDRANT_AVAILABLE = False
-    logger.warning("Qdrant client not available. Vector search will be disabled.")
-
-
-# Import new search pipeline components (with fallback)
-try:
-    from intelligence.nlp.search_pipeline import (
-        search_products,
-        normalize_text,
-        parse_query,
-        EnhancedVectorSearchService
-    )
-    NEW_PIPELINE_AVAILABLE = True
-    logger.info("New search pipeline loaded successfully")
-except ImportError as e:
-    NEW_PIPELINE_AVAILABLE = False
-    logger.warning(f"Could not import new search pipeline: {e}")
-    # Define fallback functions
-    async def search_products(db, query_text, limit=20, vector_limit=50):
-        return []
-    def normalize_text(text):
-        class MockResult:
-            def __init__(self, text):
-                self.normalized = text.lower().strip()
-                self.tokens = self.normalized.split()
-        return MockResult(text)
-    def parse_query(query):
-        class MockParsedQuery:
-            def __init__(self):
-                self.original = query
-                self.normalized = query.lower().strip()
-                self.brand = None
-                self.category = None
-                self.size = None
-                self.unit = None
-                self.keywords = []
-                self.metadata = {}
-        return MockParsedQuery()
-    class EnhancedVectorSearchService:
-        def __init__(self):
-            self.client = None
-            self.model = None
-        async def search_similar_products(self, query_text, limit=5, score_threshold=0.3):
-            return []
-        async def index_product(self, product_data, embedding_text=None):
-            return False
-        async def index_products_batch(self, products):
-            return 0
-        def get_collection_info(self):
-            return None
-        def health_check(self):
-            return False
-
-
-class VectorSearchService:
-    """Service for handling vector-based product search using Qdrant."""
-
-    _model = None  # Class-level cache for the sentence transformer model
-
-    def __init__(self):
-        self.client = None
-        self.collection_name = "product_embeddings"
-        self.vector_size = 384  # Default for sentence-transformers/all-MiniLM-L6-v2
-        self._initialize_client()
-        self._initialize_model()
-
-    def _initialize_client(self):
-        """Initialize Qdrant client connection."""
-        if not QDRANT_AVAILABLE:
-            return
-
-        try:
-            qdrant_host = os.getenv("QDRANT_HOST", "localhost")
-            qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
-
-            self.client = QdrantClient(host=qdrant_host, port=qdrant_port)
-
-            # Try to get collection info, create if doesn't exist
-            try:
-                self.client.get_collection(self.collection_name)
-                logger.info(f"Connected to existing Qdrant collection: {self.collection_name}")
-            except Exception:
-                # Collection doesn't exist, create it
-                self.client.create_collection(
-                    collection_name=self.collection_name,
-                    vectors_config=rest.VectorParams(
-                        size=self.vector_size,
-                        distance=rest.Distance.COSINE
-                    )
-                )
-                logger.info(f"Created new Qdrant collection: {self.collection_name}")
-
-        except Exception as e:
-            logger.warning(f"Failed to initialize Qdrant client: {e}")
-            self.client = None
-
-    def _initialize_model(self):
-        """Initialize sentence transformer model for text encoding."""
-        if VectorSearchService._model is not None:
-            return
-
-        try:
-            from sentence_transformers import SentenceTransformer
-            VectorSearchService._model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Loaded sentence transformer model: all-MiniLM-L6-v2")
-        except Exception as e:
-            logger.warning(f"Failed to load sentence transformer model: {e}")
-            VectorSearchService._model = None
-
-    async def search_similar_products(self, query_text: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """
-        Search for similar products using vector embeddings.
-
-        Args:
-            query_text: Text to search for
-            limit: Maximum number of results to return
-
-        Returns:
-            List of product matches with scores and product IDs
-        """
-        if not self.client or VectorSearchService._model is None:
-            logger.warning("Qdrant client or sentence transformer model not available for vector search")
-            return []
-
-        try:
-            # Encode the query text to a vector
-            vector = VectorSearchService._model.encode(query_text).tolist()
-
-            # Search in Qdrant
-            search_result = self.client.query_points(
-                collection_name=self.collection_name,
-                query=vector,
-                limit=limit,
-                with_payload=True  # We need the payload to get the product ID
-            ).points
-
-            # Format results
-            results = []
-            for point in search_result:
-                payload = point.payload or {}
-                product_id = payload.get("product_id")
-                if product_id:
-                    results.append({
-                        "product_id": product_id,
-                        "score": point.score,
-                        "payload": payload  # Include full payload for potential future use
-                    })
-
-            logger.info(f"Vector search for '{query_text}' returned {len(results)} results")
-            return results
-
-        except Exception as e:
-            logger.error(f"Error performing vector search: {e}")
-            return []
-
-
-# Initialize vector search service
-vector_search_service = VectorSearchService()
-
-
-async def find_product(db, query_text: str) -> Optional[dict]:
+async def get_product_by_id(db: AsyncIOMotorDatabase, product_id: str) -> Optional[Dict[str, Any]]:
     """
-    Find a single product document matching the given text using enhanced fuzzy matching
-    with RapidFuzz, falling back to exact matching, and enhanced with vector search.
+    Helper function to fetch a product document by ID.
+
+    Args:
+        db: MongoDB database connection
+        product_id: Product ID string
+
+    Returns:
+        Product document or None
+    """
+    try:
+        object_id = ObjectId(product_id)
+        return await db.products.find_one({"_id": object_id})
+    except Exception as e:
+        logger.warning(f"Error fetching product {product_id}: {e}")
+        return None
+
+
+async def find_product(db: AsyncIOMotorDatabase, query_text: str) -> Optional[Dict[str, Any]]:
+    """
+    Find a single product document matching the given text using the search pipeline.
+
+    Responsibilities:
+    1. Validate query
+    2. Call search_pipeline.search_products(limit=1)
+    3. Fetch MongoDB document using returned product_id
+    4. Attach metadata (_match_type, _confidence)
+    5. Return product document or None
+
+    Does NOT perform any internal searching or fallback logic.
 
     Args:
         db: MongoDB database connection
         query_text: Text to search for
 
     Returns:
-        Product document or None
+        Product document with added metadata or None
     """
     if not query_text or not query_text.strip():
         return None
 
-    # Use new search pipeline if available
-    if NEW_PIPELINE_AVAILABLE:
-        try:
-            # Get top result from new pipeline
-            results = await search_products(db, query_text, limit=1, vector_limit=50)
-            if results:
-                result = results[0]
-                product_id = result["product_id"]
-                # Fetch the full product document from MongoDB
-                product = await db.products.find_one({"_id": ObjectId(product_id)})
-                if product:
-                    # Add metadata to match old format
-                    product["_match_type"] = "hybrid"
-                    product["_confidence"] = result["final_score"]
-                    return product
-        except Exception as e:
-            logger.warning(f"New search pipeline failed: {e}")
-            # Fall back to old method
-
-    # Fallback to original implementation
     try:
-        # First try enhanced fuzzy matching (includes RapidFuzz, phonetic, aliases)
-        product = await find_product_enhanced(db, query_text)
-        if product:
-            product["_match_type"] = "enhanced_fuzzy"
-            product["_confidence"] = getattr(product, '_confidence', 0.8)
-            return product
+        # Import here to avoid circular imports and allow graceful degradation
+        from intelligence.nlp.search_pipeline import search_products
+
+        # Get top result from search pipeline (limit=1)
+        results = await search_products(db, query_text, limit=1, vector_limit=50)
+
+        if not results:
+            return None
+
+        result = results[0]
+        product_id = result.get("product_id")
+
+        if not product_id:
+            logger.warning("Search result missing product_id")
+            return None
+
+        # Fetch the full product document from MongoDB
+        product = await get_product_by_id(db, product_id)
+        if not product:
+            logger.warning(f"Product {product_id} not found in MongoDB")
+            return None
+
+        # Attach metadata from search pipeline result
+        product["_match_type"] = result.get("match_type", "pipeline")
+        product["_confidence"] = result.get("final_score", 0.0)
+
+        return product
 
     except Exception as e:
-        logger.warning(f"Enhanced product matching failed: {e}")
-
-    try:
-        # Enrich with vector search if available
-        vector_products = await find_product_hybrid(db, query_text, limit=5)
-        if vector_products:
-            # Return the best match from hybrid search
-            best_product = vector_products[0]
-            # Ensure we have the metadata fields set properly
-            if "_match_type" not in best_product:
-                best_product["_match_type"] = "hybrid"
-            if "_confidence" not in best_product:
-                # Use vector score or default to 0.8
-                best_product["_confidence"] = best_product.get("_vector_score", 0.8)
-            return best_product
-
-    except Exception as e:
-        logger.warning(f"Hybrid search failed: {e}")
-
-    try:
-        # Fallback to original exact matching if enhanced fails
-        escaped = re.escape(query_text.strip())
-        pattern = f"^{escaped}$"
-        query = {
-            "$or": [
-                {"name": {"$regex": pattern, "$options": "i"}},
-                {"swahili_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
-                {"sheng_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
-            ]
-        }
-        product = await db.products.find_one(query)
-        if product:
-            product["_match_type"] = "exact"
-            product["_confidence"] = 1.0
-            return product
-    except Exception as e:
-        logger.warning(f"Exact matching failed: {e}")
-
-    # If all fail, return None
-    return None
+        logger.exception(f"Error in find_product for query '{query_text}': {e}")
+        return None
 
 
 async def get_product_prices(
-    db,
-    product: dict,
+    db: AsyncIOMotorDatabase,
+    product: Dict[str, Any],
     town: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
@@ -320,7 +128,7 @@ async def get_product_prices(
     # Rank cheapest first
     prices.sort(key=lambda p: p["price_kes"])
 
-    store_entries: List[dict] = []
+    store_entries: list[dict] = []
     for price in prices:
         store = stores_by_id.get(price["store_id"])
         if not store:
@@ -344,7 +152,7 @@ async def get_product_prices(
 
 
 async def query_single_product(
-    db,
+    db: AsyncIOMotorDatabase,
     query_text: str,
     town: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -359,267 +167,6 @@ async def query_single_product(
         return None
 
     return await get_product_prices(db, product, town=town)
-
-
-# Additional function for hybrid search (vector + fuzzy)
-async def find_product_hybrid(db, query_text: str, limit: int = 10) -> List[Dict[str, Any]]:
-    """
-    Find products using hybrid approach: vector search + fuzzy matching.
-
-    Args:
-        db: MongoDB database connection
-        query_text: Text to search for
-        limit: Maximum number of results to return
-
-    Returns:
-        List of product matches sorted by relevance score
-    """
-    if not query_text or not query_text.strip():
-        return []
-
-    # Use new search pipeline if available
-    if NEW_PIPELINE_AVAILABLE:
-        try:
-            # Get results from new pipeline
-            results = await search_products(db, query_text, limit=limit, vector_limit=50)
-            products = []
-            for result in results:
-                product_id = result["product_id"]
-                # Fetch the full product document from MongoDB
-                product = await db.products.find_one({"_id": ObjectId(product_id)})
-                if product:
-                    # Add metadata to match old format
-                    product["_match_type"] = "hybrid"
-                    product["_confidence"] = result["final_score"]
-                    products.append(product)
-            return products
-        except Exception as e:
-            logger.warning(f"New search pipeline failed: {e}")
-            # Fall back to old method
-
-    # Fallback to original implementation
-    results = []
-
-    # Get fuzzy matches using rapidfuzz (returns product documents)
-    try:
-        fuzzy_matches = await _get_fuzzy_matches(db, query_text, limit)
-        results.extend(fuzzy_matches)
-    except Exception as e:
-        logger.warning(f"Fuzzy matching failed: {e}")
-
-    # Get vector matches (returns product IDs and scores)
-    try:
-        vector_matches = await vector_search_service.search_similar_products(query_text, limit)
-        # Fetch product documents for the vector matches
-        for match in vector_matches:
-            product_id = match.get("product_id")
-            if product_id:
-                try:
-                    # Try to handle both string and ObjectId formats
-                    if isinstance(product_id, str) and len(product_id) == 24:
-                        object_id = ObjectId(product_id)
-                    else:
-                        object_id = ObjectId(product_id)  # Let ObjectId handle validation
-
-                    product_doc = await db.products.find_one({"_id": object_id})
-                    if product_doc:
-                        # Add metadata to indicate it's a vector match
-                        product_doc["_match_type"] = "vector"
-                        product_doc["_confidence"] = match.get("score", 0.0)
-                        product_doc["_vector_score"] = match.get("score", 0.0)
-                        results.append(product_doc)
-                except Exception as e:
-                    logger.warning(f"Error fetching product {product_id} from vector match: {e}")
-    except Exception as e:
-        logger.warning(f"Vector search failed: {e}")
-
-    # Deduplicate and rank results
-    if results:
-        # Remove duplicates by product_id, keeping highest score
-        seen_products = {}
-        for result in results:
-            pid = str(result.get("_id"))
-            # Determine score: use _confidence for fuzzy/enhanced, _vector_score for vector, default 0.5
-            score = result.get("_confidence") or result.get("_vector_score") or 0.5
-            if pid and (pid not in seen_products or score > seen_products[pid].get("score", 0)):
-                seen_products[pid] = {
-                    "document": result,
-                    "score": score
-                }
-
-        # Sort by score descending
-        results = sorted(
-            [v["document"] for v in seen_products.values()],
-            key=lambda x: x.get("_confidence") or x.get("_vector_score") or 0.5,
-            reverse=True
-        )
-        return results[:limit]
-
-    return []
-
-
-async def _get_fuzzy_matches(db, query_text: str, limit: int) -> List[Dict[str, Any]]:
-    """
-    Get fuzzy matches using rapidfuzz.
-
-    Args:
-        db: MongoDB database connection
-        query_text: Text to search for
-        limit: Maximum number of results
-
-    Returns:
-        List of fuzzy matches (product documents)
-    """
-    try:
-        # Get all product names and aliases for matching
-        products_cursor = db.products.find(
-            {},
-            {
-                "_id": 1,
-                "name": 1,
-                "swahili_aliases": 1,
-                "sheng_aliases": 1
-            }
-        )
-        products = await products_cursor.to_list(length=None)
-
-        # Create searchable terms
-        search_terms = []
-        product_map = {}  # Maps search term to product info
-
-        for product in products:
-            product_id = str(product["_id"])
-            name = product.get("name", "").strip()
-            swahili_aliases = [alias.strip() for alias in product.get("swahili_aliases", [])]
-            sheng_aliases = [alias.strip() for alias in product.get("sheng_aliases", [])]
-
-            # Add main name
-            if name:
-                search_terms.append(name.lower())
-                product_map[name.lower()] = {
-                    "product_id": product_id,
-                    "product_name": name,
-                    "match_type": "exact",
-                    "confidence": 1.0
-                }
-
-            # Add Swahili aliases
-            for alias in swahili_aliases:
-                if alias:
-                    search_terms.append(alias.lower())
-                    product_map[alias.lower()] = {
-                        "product_id": product_id,
-                        "product_name": name,
-                        "match_type": "swahili_alias",
-                        "confidence": 0.95
-                    }
-
-            # Add Sheng aliases
-            for alias in sheng_aliases:
-                if alias:
-                    search_terms.append(alias.lower())
-                    product_map[alias.lower()] = {
-                        "product_id": product_id,
-                        "product_name": name,
-                        "match_type": "sheng_alias",
-                        "confidence": 0.9
-                    }
-
-        # Use rapidfuzz for fuzzy matching
-        if process and search_terms:
-            matches = process.extract(
-                query_text.lower(),
-                search_terms,
-                scorer=fuzz.WRatio,
-                limit=limit * 2  # Get more to account for duplicates
-            )
-
-            results = []
-            seen_products = set()
-
-            for match_term, score, _ in matches:
-                if score >= 60:  # Minimum similarity threshold
-                    product_info = product_map.get(match_term)
-                    if product_info:
-                        pid = product_info["product_id"]
-                        if pid not in seen_products:
-                            seen_products.add(pid)
-                            # Fetch full product document
-                            product_doc = await db.products.find_one({"_id": ObjectId(pid)})
-                            if product_doc:
-                                product_doc["_match_type"] = product_info["match_type"]
-                                product_doc["_confidence"] = score / 100.0
-                                product_doc["_matched_term"] = match_term
-                                results.append(product_doc)
-
-            return results[:limit]
-
-    except Exception as e:
-        logger.error(f"Error in fuzzy matching: {e}")
-
-    return []
-
-
-async def find_product_matches(db, query_text: str, limit: int = 10) -> List[Dict[str, Any]]:
-    """
-    Find up to `limit` distinct products matching a query, each with its
-    cheapest current price attached. Used for single-product queries where
-    multiple product types/brands could satisfy the search (e.g. "milk"
-    -> several brands/variants) so the user can compare and confirm.
-    """
-    if not query_text or not query_text.strip():
-        return []
-
-    candidates: List[Dict[str, Any]] = []
-    seen_ids = set()
-
-    # Exact match first, always included if found
-    try:
-        escaped = re.escape(query_text.strip())
-        pattern = f"^{escaped}$"
-        exact = await db.products.find_one({
-            "$or": [
-                {"name": {"$regex": pattern, "$options": "i"}},
-                {"swahili_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
-                {"sheng_aliases": {"$elemMatch": {"$regex": pattern, "$options": "i"}}},
-            ]
-        })
-        if exact:
-            candidates.append(exact)
-            seen_ids.add(str(exact["_id"]))
-    except Exception as e:
-        logger.warning(f"Exact matching failed: {e}")
-
-    # Fill remaining slots with hybrid (fuzzy + vector) candidates
-    try:
-        hybrid_matches = await find_product_hybrid(db, query_text, limit=limit * 2)
-        for m in hybrid_matches:
-            pid = str(m.get("_id"))
-            if pid and pid not in seen_ids:
-                candidates.append(m)
-                seen_ids.add(pid)
-            if len(candidates) >= limit:
-                break
-    except Exception as e:
-        logger.warning(f"Hybrid matching failed: {e}")
-
-    # Attach cheapest price for each candidate; drop ones with no pricing at all
-    results = []
-    for product in candidates[:limit]:
-        prices_data = await get_product_prices(db, product)
-        if prices_data and prices_data.get("stores"):
-            cheapest_store = prices_data["stores"][0]  # already sorted cheapest-first
-            results.append({
-                "product_id": str(product["_id"]),
-                "name": product.get("name", "Unknown"),
-                "price_label": cheapest_store["price"],
-                "price_value": parse_price_value(cheapest_store["price"]),
-                "store_name": cheapest_store["name"],
-                "offer": cheapest_store["offer"],
-            })
-
-    results.sort(key=lambda x: x["price_value"])
-    return results
 
 
 def parse_price_value(price_str: str) -> float:
