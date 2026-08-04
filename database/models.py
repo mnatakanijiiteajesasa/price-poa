@@ -342,7 +342,7 @@ class ChatMessage(BaseModel):
             "example": {
                 "session_id": "60f7b3b5d8f1a434e8a6b5c1",
                 "user_id": 123456789,
-                "message_text": "Anyone playing GTA 6 yet?",
+                "message_text": "Do you have fresh tomatoes today?",
                 "is_edited": False,
                 "created_at": "2026-08-04T10:30:00Z"
             }
@@ -677,6 +677,44 @@ class ChatRequest(BaseModel):
         }
 
 
+CHAT_REQUEST_VALIDATOR = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["buyer_user_id", "grocer_id", "status", "expires_at"],
+        "properties": {
+            "buyer_user_id": {
+                "bsonType": ["int", "long"],
+                "description": "Telegram user ID of the buyer - must be an integer and is required"
+            },
+            "grocer_id": {
+                "bsonType": "string",
+                "description": "Reference to grocer document ID - must be a string and is required"
+            },
+            "status": {
+                "bsonType": "string",
+                "description": "Request status: pending, accepted, declined, expired"
+            },
+            "buyer_message": {
+                "bsonType": "string",
+                "description": "Optional message from buyer to grocer"
+            },
+            "created_at": {
+                "bsonType": "date",
+                "description": "Timestamp when request was created"
+            },
+            "expires_at": {
+                "bsonType": "date",
+                "description": "When the request expires"
+            },
+            "responded_at": {
+                "bsonType": "date",
+                "description": "When the grocer responded to the request"
+            }
+        }
+    }
+}
+
+
 class DiscoverySearchContext(BaseModel):
     """
     The exact ranked seller list most recently shown to a buyer, so a
@@ -746,7 +784,13 @@ GROCER_INDEXES = [
     ([("opted_in_visible", 1)], {"unique": False}),
     ([("is_banned", 1)], {"unique": False}),
     ([("town", 1), ("verification_status", 1)], {"unique": False}),
-    ([("categories", 1)], {"unique": False}),  # For querying by category
+    ([("categories", 1)], {"unique": False}),
+    # Supports the discovery query's filter + sort in one index — filter
+    # fields first, sort field last, matching what the webhook actually queries.
+    (
+        [("verification_status", 1), ("opted_in_visible", 1), ("is_banned", 1), ("credibility_score", -1)],
+        {"unique": False},
+    ),
 ]
 
 GROCER_REVIEW_INDEXES = [
