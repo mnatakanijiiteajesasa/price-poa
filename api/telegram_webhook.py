@@ -33,10 +33,6 @@ logger = logging.getLogger("uvicorn.error")
 # Router
 router = APIRouter()
 
-# NOTE: get_database() is an async coroutine function (Motor). It must be
-# awaited before use, so every handler below resolves the db lazily via
-# `db = await get_database()` instead of sharing a module-level connection.
-
 # Webhook Models
 class TelegramUpdate(BaseModel):
     update_id: int
