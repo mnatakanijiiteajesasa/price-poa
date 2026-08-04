@@ -1,0 +1,2 @@
+# Test file
+test_content = "Hello World"

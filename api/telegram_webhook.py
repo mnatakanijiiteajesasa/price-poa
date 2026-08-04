@@ -1,9 +1,10 @@
 """
 telegram_webhook.py
 FastAPI webhook endpoint for the Telegram Bot API - receives messages, sends replies.
+Handles chat sessions, reviews, and credibility scoring for grocers.
 """
 
-from fastapi import APIRouter, Request, HTTPException, Header
+from fastapi import APIRouter, Request, HTTPException, Header, BackgroundTasks
 from fastapi.responses import JSONResponse
 import logging
 from typing import Optional, List, Dict, Any
@@ -19,12 +20,315 @@ from query_engine import get_product_prices, find_product_matches
 from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_fuzzy
 from query_engine import find_product
-from database.models import ChatSession, ChatMessage, Grocer, ChatRequest
+from database.models import (
+    ChatSession, ChatMessage, Grocer, ChatRequest,
+    GrocerReview, GROCER_VALIDATOR, GROCER_REVIEW_VALIDATOR,
+    CHAT_SESSION_VALIDATOR, CHAT_MESSAGE_VALIDATOR
+)
 
 logger = logging.getLogger("uvicorn.error")
 
 # Create router
 router = APIRouter()
+
+# Initialize database connection
+db = get_database()
+
+# Collections
+grocers_collection = db.grocers
+reviews_collection = db.grocer_reviews
+sessions_collection = db.chat_sessions
+messages_collection = db.chat_messages
+requests_collection = db.chat_requests
+
+# Webhook Models
+class TelegramUpdate(BaseModel):
+    update_id: int
+    message: Optional[Dict[str, Any]] = None
+    callback_query: Optional[Dict[str, Any]] = None
+
+class TelegramMessage(BaseModel):
+    message_id: int
+    from_user: dict
+    chat: dict
+    date: int
+    text: Optional[str] = None
+    callback_query: Optional[Dict[str, Any]] = None
+
+class ReviewRequest(BaseModel):
+    grocer_id: str
+    reviewer_user_id: int
+    rating: int
+    comment: Optional[str] = None
+    session_id: str
+
+class SessionEndedRequest(BaseModel):
+    session_id: str
+    ended_by: str  # "buyer" or "grocer"
+    ended_at: datetime
+
+class RatingPromptRequest(BaseModel):
+    session_id: str
+    buyer_user_id: int
+    grocer_id: str
+    chat_ended_at: datetime
+
+# Helper Functions
+def verify_session_completion(session_id: str) -> bool:
+    """Verify that a session exists and has been completed."""
+    session = sessions_collection.find_one({"_id": session_id})
+    if not session:
+        return False
+
+    # Check if session is ended
+    return session.get("status") in ["ended_by_buyer", "ended_by_grocer", "expired"]
+
+def check_review_rate_limit(grocer_id: str, reviewer_user_id: int) -> bool:
+    """
+    Check if reviewer has already reviewed this grocer in the last 30 days.
+    Returns True if they CAN review (not rate limited), False if they cannot.
+    """
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+
+    existing_review = reviews_collection.find_one({
+        "grocer_id": grocer_id,
+        "reviewer_user_id": reviewer_user_id,
+        "created_at": {"$gte": thirty_days_ago}
+    })
+
+    return existing_review is None
+
+def calculate_credibility_score(grocer_id: str) -> float:
+    """
+    Calculate credibility score for a grocer based on:
+    - Average rating (40%)
+    - Number of reviews (20%, capped at 50 reviews = full score)
+    - Tenure with decay (20%)
+    - Verification status (10%)
+    - Response rate (10%) - simplified as activity check
+
+    Returns score from 0.0 to 5.0
+    """
+    grocer = grocers_collection.find_one({"_id": grocer_id})
+    if not grocer:
+        return 0.0
+
+    # Get reviews for this grocer
+    reviews = list(reviews_collection.find({"grocer_id": grocer_id}))
+
+    if not reviews:
+        # New grocer - base score on verification status only
+        verification_score = {
+            "pending": 1.0,
+            "verified": 3.0,
+            "rejected": 0.0
+        }.get(grocer.get("verification_status", "pending"), 1.0)
+
+        # New grocer gets base score based on verification
+        return min(max(verification_score, 0.0), 5.0)
+
+    # Calculate average rating
+    total_rating = sum(review["rating"] for review in reviews)
+    avg_rating = total_rating / len(reviews)
+
+    # Review count score (0-5 scale, max at 50 reviews)
+    review_count_score = min(len(reviews) / 50 * 5, 5)
+
+    # Tenure score with decay (older accounts get slightly less weight)
+    account_age_days = (datetime.utcnow() - grocer["created_at"]).days
+    # Peak at 365 days, then slight decay
+    tenure_score = min(5.0, (min(account_age_days, 365) / 365) * 5)
+    if account_age_days > 365:
+        # Slight decay after 1 year
+        decay_factor = 0.95 ** ((account_age_days - 365) / 365)
+        tenure_score *= decay_factor
+
+    # Verification score
+    verification_score_map = {
+        "pending": 1.0,
+        "verified": 5.0,
+        "rejected": 0.0
+    }
+    verification_score = verification_score_map.get(grocer.get("verification_status", "pending"), 1.0)
+
+    # Response rate (simplified: check if grocer has been active recently)
+    last_activity = grocer.get("updated_at", grocer["created_at"])
+    days_since_active = (datetime.utcnow() - last_activity).days
+    # Full points if active in last 30 days, decaying after that
+    response_score = max(0.0, 5.0 - (days_since_active / 30))
+    if days_since_active > 90:
+        response_score = 0.0  # No points if inactive for over 90 days
+
+    # Weighted composite score
+    credibility_score = (
+        avg_rating * 0.40 +          # 40% from average rating
+        review_count_score * 0.20 +   # 20% from review count
+        tenure_score * 0.20 +         # 20% from tenure with decay
+        verification_score * 0.10 +   # 10% from verification status
+        response_score * 0.10         # 10% from response rate
+    )
+
+    # Ensure score is between 0 and 5
+    return min(max(credibility_score, 0.0), 5.0)
+
+def update_grocer_credibility_score(grocer_id: str):
+    """Update the credibility score for a grocer in the database."""
+    score = calculate_credibility_score(grocer_id)
+    result = grocers_collection.update_one(
+        {"_id": grocer_id},
+        {"$set": {"credibility_score": score, "updated_at": datetime.utcnow()}}
+    )
+    logger.info(f"Updated credibility score for grocer {grocer_id}: {score}")
+    return score
+
+def update_review_stats(grocer_id: str):
+    """Update the grocer's review statistics (average rating and review count)."""
+    try:
+        # Get all reviews for this grocer
+        reviews = list(reviews_collection.find({"grocer_id": grocer_id}))
+
+        if reviews:
+            total_rating = sum(review["rating"] for review in reviews)
+            avg_rating = total_rating / len(reviews)
+            review_count = len(reviews)
+
+            # Update grocer document
+            grocers_collection.update_one(
+                {"_id": grocer_id},
+                {
+                    "$set": {
+                        "rating_average": round(avg_rating, 2),
+                        "review_count": review_count,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+            logger.info(f"Updated review stats for grocer {grocer_id}: avg={avg_rating}, count={review_count}")
+        else:
+            # Reset to defaults if no reviews
+            grocers_collection.update_one(
+                {"_id": grocer_id},
+                {
+                    "$set": {
+                        "rating_average": 0.0,
+                        "review_count": 0,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+    except Exception as e:
+        logger.error(f"Error updating review stats for grocer {grocer_id}: {e}")
+
+# Background task for nightly credibility score recalculation
+def recalculate_all_credibility_scores():
+    """Nightly job to recalculate credibility scores for all grocers."""
+    try:
+        logger.info("Starting nightly credibility score recalculation")
+
+        # Get all grocers
+        grocers = grocers_collection.find({})
+        updated_count = 0
+
+        for grocer in grocers:
+            grocer_id = grocer["_id"]
+            score = calculate_credibility_score(grocer_id)
+
+            # Update the grocer's credibility score
+            grocers_collection.update_one(
+                {"_id": grocer_id},
+                {"$set": {"credibility_score": score, "updated_at": datetime.utcnow()}}
+            )
+            updated_count += 1
+
+        logger.info(f"Completed nightly credibility score recalculation for {updated_count} grocers")
+
+    except Exception as e:
+        logger.error(f"Error in nightly credibility score recalculation: {e}")
+
+# Anti-Gaming: Isolation Forest for detecting review bursts
+# Note: In a real implementation, we would use scikit-learn's IsolationForest
+# For now, we'll implement a simplified version that flags suspicious patterns
+def detect_review_bursts(grocer_id: str) -> bool:
+    """
+    Detect suspicious review bursts that might indicate gaming.
+    Returns True if suspicious activity is detected.
+    """
+    try:
+        # Get reviews for this grocer in the last 7 days
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        recent_reviews = list(reviews_collection.find({
+            "grocer_id": grocer_id,
+            "created_at": {"$gte": seven_days_ago}
+        }))
+
+        # If more than 5 reviews in 7 days from new/no-review accounts, flag for review
+        if len(recent_reviews) > 5:
+            # Check if reviewers are new accounts (simplified check)
+            new_reviewer_count = 0
+            for review in recent_reviews:
+                reviewer_id = review["reviewer_user_id"]
+                # Check if reviewer has only left 1 review total (their first review)
+                total_reviews_by_user = reviews_collection.count_documents(
+                    {"reviewer_user_id": reviewer_id}
+                )
+                if total_reviews_by_user == 1:
+                    new_reviewer_count += 1
+
+            # If more than 60% of recent reviews are from first-time reviewers, flag
+            if len(recent_reviews) > 0 and (new_reviewer_count / len(recent_reviews)) > 0.6:
+                logger.warning(f"Potential review burst detected for grocer {grocer_id}")
+                return True
+
+        return False
+    except Exception as e:
+        logger.error(f"Error detecting review bursts for grocer {grocer_id}: {e}")
+        return False
+
+def flag_grocer_for_review(grocer_id: str, reason: str):
+    """Flag a grocer for manual review due to suspicious activity."""
+    try:
+        grocers_collection.update_one(
+            {"_id": grocer_id},
+            {
+                "$set": {
+                    "is_flagged": True,
+                    "flagged_at": datetime.utcnow(),
+                    "flag_reason": reason,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        logger.warning(f"Grocer {grocer_id} flagged for review: {reason}")
+    except Exception as e:
+        logger.error(f"Error flagging grocer {grocer_id}: {e}")
+
+
+async def handle_telegram_message(message: Dict[str, Any], background_tasks: BackgroundTasks):
+    """Handle incoming Telegram messages."""
+    try:
+        telegram_message = TelegramMessage(**message)
+        user_id = telegram_message.from_user.get("id")
+        chat_id = telegram_message.chat.get("id")
+        text = telegram_message.text
+
+        logger.info(f"Processing message from user {user_id}: {text}")
+
+        # Handle commands
+        if text and text.startswith("/"):
+            await handle_telegram_command(text, user_id, chat_id, background_tasks)
+
+    except Exception as e:
+        logger.error(f"Error handling Telegram message: {e}")
+
+
+async def handle_telegram_command(command: str, user_id: int, chat_id: int, background_tasks: BackgroundTasks):
+    """Handle Telegram commands."""
+    if command.startswith("/start"):
+        # Handle start command - show help or initiate chat
+        pass
+    elif command.startswith("/review"):
+        # Handle review command - this would be used when buyer wants to review a grocer
+        pass
 
 
 def extract_product_names_from_shopping_list(text: str) -> List[str]:
@@ -1022,11 +1326,17 @@ async def telegram_webhook(
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     # Extract message details. Telegram updates can be messages, edited
-    # messages, channel posts, callback queries, etc. - we only care about
-    # plain incoming text messages for now.
+    # messages, channel posts, callback queries, etc.
     message = update.get("message")
+    callback_query = update.get("callback_query")
+
+    # Handle callback queries (for rating buttons)
+    if callback_query:
+        await handle_callback_query(callback_query, background_tasks)
+        return JSONResponse(status_code=200, content={"status": "accepted"})
+
     if not message:
-        logger.info("Received non-message update (e.g. edited_message, callback_query)")
+        logger.info("Received non-message update (e.g. edited_message)")
         return JSONResponse(status_code=200, content={"status": "ok"})
 
     chat = message.get("chat", {})

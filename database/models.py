@@ -377,6 +377,7 @@ class ChatMessage(BaseModel):
                 "created_at": "2026-08-04T10:30:00Z"
             }
         }
+}
 
 
 # Collection validation schemas for MongoDB
@@ -476,6 +477,10 @@ class Grocer(BaseModel):
     is_banned: bool = Field(default=False, description="Whether the grocer is banned from the platform")
     rating_average: float = Field(default=0.0, ge=0.0, le=5.0, description="Average rating from reviews (0-5)")
     review_count: int = Field(default=0, ge=0, description="Number of reviews received")
+    credibility_score: float = Field(default=0.0, ge=0.0, le=5.0, description="Computed credibility score (0-5)")
+    is_flagged: bool = Field(default=False, description="Whether the grocer is flagged for potential review fraud")
+    flagged_at: Optional[datetime] = Field(None, description="When the grocer was flagged")
+    flag_reason: Optional[str] = Field(None, max_length=200, description="Reason for flagging")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -513,7 +518,9 @@ class Grocer(BaseModel):
                 "opted_in_visible": True,
                 "is_banned": False,
                 "rating_average": 4.5,
-                "review_count": 12
+                "review_count": 12,
+                "credibility_score": 4.2,
+                "is_flagged": False
             }
         }
 
@@ -525,6 +532,7 @@ class GrocerReview(BaseModel):
     reviewer_user_id: int = Field(..., description="Telegram user ID of the reviewer")
     rating: int = Field(..., ge=1, le=5, description="Rating from 1 to 5 stars")
     comment: Optional[str] = Field(None, max_length=500, description="Optional review comment")
+    session_id: str = Field(..., description="Reference to chat session document ID this review is for")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     @validator('reviewer_user_id')
@@ -543,87 +551,11 @@ class GrocerReview(BaseModel):
                 "reviewer_user_id": 987654321,
                 "rating": 5,
                 "comment": "Excellent quality vegetables, always fresh!",
+                "session_id": "60f7b3b5d8f1a434e8a6b5c2",
                 "created_at": "2026-08-04T10:30:00Z"
             }
         }
-
-
-# Chat Request Schema (for consent handshake between buyers and sellers)
-class ChatRequest(BaseModel):
-    """Chat request schema for the chat_requests collection."""
-    buyer_user_id: int = Field(..., description="Telegram user ID of the buyer")
-    grocer_id: str = Field(..., description="Reference to grocer document ID")
-    status: str = Field(default="pending", description="Request status: pending, accepted, declined, expired")
-    buyer_message: Optional[str] = Field(None, max_length=500, description="Optional message from buyer to grocer")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    expires_at: datetime = Field(..., description="When the request expires (10 minutes from creation)")
-    responded_at: Optional[datetime] = Field(None, description="When the grocer responded to the request")
-
-    @validator('buyer_user_id')
-    def buyer_user_id_must_be_positive(cls, v):
-        if v <= 0:
-            raise ValueError('Buyer user ID must be positive')
-        return v
-
-    @validator('status')
-    def status_must_be_valid(cls, v):
-        allowed_statuses = ["pending", "accepted", "declined", "expired"]
-        if v not in allowed_statuses:
-            raise ValueError(f'Status must be one of {allowed_statuses}')
-        return v
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-        schema_extra = {
-            "example": {
-                "buyer_user_id": 111111111,
-                "grocer_id": "60f7b3b5d8f1a434e8a6b5c1",
-                "status": "pending",
-                "buyer_message": "Hello, I'm interested in buying some tomatoes and onions. Do you have fresh ones available today?",
-                "created_at": "2026-08-04T10:30:00Z",
-                "expires_at": "2026-08-04T10:40:00Z"
-            }
-        }
-
-
-# Updated Chat Session Schema (more general purpose for buyer-seller chats)
-class ChatSession(BaseModel):
-    """Chat session schema for the chat_sessions collection."""
-    buyer_user_id: int = Field(..., description="Telegram user ID of the buyer")
-    grocer_id: str = Field(..., description="Reference to grocer document ID")
-    status: str = Field(default="active", description="Session status: active, ended_by_buyer, ended_by_grocer, expired")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    ended_at: Optional[datetime] = Field(None, description="When the session was ended")
-
-    @validator('buyer_user_id')
-    def buyer_user_id_must_be_positive(cls, v):
-        if v <= 0:
-            raise ValueError('Buyer user ID must be positive')
-        return v
-
-    @validator('status')
-    def status_must_be_valid(cls, v):
-        allowed_statuses = ["active", "ended_by_buyer", "ended_by_grocer", "expired"]
-        if v not in allowed_statuses:
-            raise ValueError(f'Status must be one of {allowed_statuses}')
-        return v
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-        schema_extra = {
-            "example": {
-                "buyer_user_id": 111111111,
-                "grocer_id": "60f7b3b5d8f1a434e8a6b5c1",
-                "status": "active",
-                "created_at": "2026-08-04T10:30:00Z",
-                "updated_at": "2026-08-04T10:35:00Z"
-            }
-        }
+```
 
 
 # Collection validation schemas for MongoDB
@@ -678,6 +610,24 @@ GROCER_VALIDATOR = {
                 "minimum": 0,
                 "description": "Number of reviews received"
             },
+            "credibility_score": {
+                "bsonType": "double",
+                "minimum": 0.0,
+                "maximum": 5.0,
+                "description": "Computed credibility score (0-5)"
+            },
+            "is_flagged": {
+                "bsonType": "bool",
+                "description": "Whether the grocer is flagged for potential review fraud"
+            },
+            "flagged_at": {
+                "bsonType": "date",
+                "description": "When the grocer was flagged"
+            },
+            "flag_reason": {
+                "bsonType": "string",
+                "description": "Reason for flagging"
+            },
             "created_at": {
                 "bsonType": "date",
                 "description": "Timestamp when grocer was created"
@@ -693,7 +643,7 @@ GROCER_VALIDATOR = {
 GROCER_REVIEW_VALIDATOR = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["grocer_id", "reviewer_user_id", "rating"],
+        "required": ["grocer_id", "reviewer_user_id", "rating", "session_id"],
         "properties": {
             "grocer_id": {
                 "bsonType": "string",
@@ -713,6 +663,10 @@ GROCER_REVIEW_VALIDATOR = {
                 "bsonType": "string",
                 "description": "Optional review comment"
             },
+            "session_id": {
+                "bsonType": "string",
+                "description": "Reference to chat session document ID this review is for - must be a string and is required"
+            },
             "created_at": {
                 "bsonType": "date",
                 "description": "Timestamp when review was created"
@@ -721,79 +675,87 @@ GROCER_REVIEW_VALIDATOR = {
     }
 }
 
-CHAT_REQUEST_VALIDATOR = {
-    "$jsonSchema": {
-        "bsonType": "object",
-        "required": ["buyer_user_id", "grocer_id"],
-        "properties": {
-            "buyer_user_id": {
-                "bsonType": "int",
-                "description": "Telegram user ID of the buyer - must be an integer and is required"
-            },
-            "grocer_id": {
-                "bsonType": "string",
-                "description": "Reference to grocer document ID - must be a string and is required"
-            },
-            "status": {
-                "bsonType": "string",
-                "description": "Request status: pending, accepted, declined, expired"
-            },
-            "buyer_message": {
-                "bsonType": "string",
-                "description": "Optional message from buyer to grocer"
-            },
-            "created_at": {
-                "bsonType": "date",
-                "description": "Timestamp when request was created"
-            },
-            "expires_at": {
-                "bsonType": "date",
-                "description": "When the request expires (10 minutes from creation)"
-            },
-            "responded_at": {
-                "bsonType": "date",
-                "description": "When the grocer responded to the request"
-            }
-        }
-    }
-}
+# Chat Request Schema (for consent handshake between buyers and sellers)
+class ChatRequest(BaseModel):
+    """Chat request schema for the chat_requests collection."""
+    buyer_user_id: int = Field(..., description="Telegram user ID of the buyer")
+    grocer_id: str = Field(..., description="Reference to grocer document ID")
+    status: str = Field(default="pending", description="Request status: pending, accepted, declined, expired")
+    buyer_message: Optional[str] = Field(None, max_length=500, description="Optional message from buyer to grocer")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: datetime = Field(..., description="When the request expires (10 minutes from creation)")
+    responded_at: Optional[datetime] = Field(None, description="When the grocer responded to the request")
 
-# Updated Chat Session validation schema (already defined above, keeping for reference)
-CHAT_SESSION_VALIDATOR = {
-    "$jsonSchema": {
-        "bsonType": "object",
-        "required": ["buyer_user_id", "grocer_id"],
-        "properties": {
-            "buyer_user_id": {
-                "bsonType": "int",
-                "description": "Telegram user ID of the buyer - must be an integer and is required"
-            },
-            "grocer_id": {
-                "bsonType": "string",
-                "description": "Reference to grocer document ID - must be a string and is required"
-            },
-            "status": {
-                "bsonType": "string",
-                "description": "Session status: active, ended_by_buyer, ended_by_grocer, expired"
-            },
-            "created_at": {
-                "bsonType": "date",
-                "description": "Timestamp when chat session was created"
-            },
-            "updated_at": {
-                "bsonType": "date",
-                "description": "Timestamp when chat session was last updated"
-            },
-            "ended_at": {
-                "bsonType": "date",
-                "description": "When the session was ended"
+    @validator('buyer_user_id')
+    def buyer_user_id_must_be_positive(cls, v):
+        if v <= 0:
+            raise ValueError('Buyer user ID must be positive')
+        return v
+
+    @validator('status')
+    def status_must_be_valid(cls, v):
+        allowed_statuses = ["pending", "accepted", "declined", "expired"]
+        if v not in allowed_statuses:
+            raise ValueError(f'Status must be one of {allowed_statuses}')
+        return v
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+        schema_extra = {
+            "example": {
+                "buyer_user_id": 111111111,
+                "grocer_id": "60f7b3b5d8f1a434e8a6b5c1",
+                "status": "pending",
+                "buyer_message": "Hello, I'm interested in buying some tomatoes and onions. Do you have fresh ones available today?",
+                "created_at": "2026-08-04T10:30:00Z",
+                "expires_at": "2026-08-04T10:40:00Z"
             }
         }
-    }
 }
 
 
-# Index definitions for new collections
+# Updated Chat Session Schema (more general purpose for buyer-seller chats)
+class ChatSession(BaseModel):
+    """Chat session schema for the chat_sessions collection."""
+    buyer_user_id: int = Field(..., description="Telegram user ID of the buyer")
+    grocer_id: str = Field(..., description="Reference to grocer document ID")
+    status: str = Field(default="active", description="Session status: active, ended_by_buyer, ended_by_grocer, expired")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    ended_at: Optional[datetime] = Field(None, description="When the session was ended")
+
+    @validator('buyer_user_id')
+    def buyer_user_id_must_be_positive(cls, v):
+        if v <= 0:
+            raise ValueError('Buyer user ID must be positive')
+        return v
+
+    @validator('status')
+    def status_must_be_valid(cls, v):
+        allowed_statuses = ["active", "ended_by_buyer", "ended_by_grocer", "expired"]
+        if v not in allowed_statuses:
+            raise ValueError(f'Status must be one of {allowed_statuses}')
+        return v
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+        schema_extra = {
+            "example": {
+                "buyer_user_id": 111111111,
+                "grocer_id": "60f7b3b5d8f1a434e8a6b5c1",
+                "status": "active",
+                "created_at": "2026-08-04T10:30:00Z",
+                "updated_at": "2026-08-04T10:35:00Z"
+            }
+        }
+}
+
+
+# Collection validation schemas for MongoDB
 GROCER_INDEXES = [
     ([("telegram_user_id", 1)], {"unique": True}),  # Each Telegram user can only have one grocer profile
     ([("town", 1)], {"unique": False}),
