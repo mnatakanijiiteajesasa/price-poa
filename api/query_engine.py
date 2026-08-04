@@ -9,7 +9,6 @@ import re
 import logging
 import os
 from typing import Optional, Dict, Any, List, Tuple
-
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -37,6 +36,56 @@ try:
 except ImportError:
     QDRANT_AVAILABLE = False
     logger.warning("Qdrant client not available. Vector search will be disabled.")
+
+
+# Import new search pipeline components (with fallback)
+try:
+    from intelligence.nlp.search_pipeline import (
+        search_products,
+        normalize_text,
+        parse_query,
+        EnhancedVectorSearchService
+    )
+    NEW_PIPELINE_AVAILABLE = True
+    logger.info("New search pipeline loaded successfully")
+except ImportError as e:
+    NEW_PIPELINE_AVAILABLE = False
+    logger.warning(f"Could not import new search pipeline: {e}")
+    # Define fallback functions
+    async def search_products(db, query_text, limit=20, vector_limit=50):
+        return []
+    def normalize_text(text):
+        class MockResult:
+            def __init__(self, text):
+                self.normalized = text.lower().strip()
+                self.tokens = self.normalized.split()
+        return MockResult(text)
+    def parse_query(query):
+        class MockParsedQuery:
+            def __init__(self):
+                self.original = query
+                self.normalized = query.lower().strip()
+                self.brand = None
+                self.category = None
+                self.size = None
+                self.unit = None
+                self.keywords = []
+                self.metadata = {}
+        return MockParsedQuery()
+    class EnhancedVectorSearchService:
+        def __init__(self):
+            self.client = None
+            self.model = None
+        async def search_similar_products(self, query_text, limit=5, score_threshold=0.3):
+            return []
+        async def index_product(self, product_data, embedding_text=None):
+            return False
+        async def index_products_batch(self, products):
+            return 0
+        def get_collection_info(self):
+            return None
+        def health_check(self):
+            return False
 
 
 class VectorSearchService:
@@ -160,6 +209,26 @@ async def find_product(db, query_text: str) -> Optional[dict]:
     if not query_text or not query_text.strip():
         return None
 
+    # Use new search pipeline if available
+    if NEW_PIPELINE_AVAILABLE:
+        try:
+            # Get top result from new pipeline
+            results = await search_products(db, query_text, limit=1, vector_limit=50)
+            if results:
+                result = results[0]
+                product_id = result["product_id"]
+                # Fetch the full product document from MongoDB
+                product = await db.products.find_one({"_id": ObjectId(product_id)})
+                if product:
+                    # Add metadata to match old format
+                    product["_match_type"] = "hybrid"
+                    product["_confidence"] = result["final_score"]
+                    return product
+        except Exception as e:
+            logger.warning(f"New search pipeline failed: {e}")
+            # Fall back to old method
+
+    # Fallback to original implementation
     try:
         # First try enhanced fuzzy matching (includes RapidFuzz, phonetic, aliases)
         product = await find_product_enhanced(db, query_text)
@@ -308,6 +377,27 @@ async def find_product_hybrid(db, query_text: str, limit: int = 10) -> List[Dict
     if not query_text or not query_text.strip():
         return []
 
+    # Use new search pipeline if available
+    if NEW_PIPELINE_AVAILABLE:
+        try:
+            # Get results from new pipeline
+            results = await search_products(db, query_text, limit=limit, vector_limit=50)
+            products = []
+            for result in results:
+                product_id = result["product_id"]
+                # Fetch the full product document from MongoDB
+                product = await db.products.find_one({"_id": ObjectId(product_id)})
+                if product:
+                    # Add metadata to match old format
+                    product["_match_type"] = "hybrid"
+                    product["_confidence"] = result["final_score"]
+                    products.append(product)
+            return products
+        except Exception as e:
+            logger.warning(f"New search pipeline failed: {e}")
+            # Fall back to old method
+
+    # Fallback to original implementation
     results = []
 
     # Get fuzzy matches using rapidfuzz (returns product documents)
