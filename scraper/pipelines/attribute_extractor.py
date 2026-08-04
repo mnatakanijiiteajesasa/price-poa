@@ -249,11 +249,9 @@ class AttributeExtractor:
         return None
 
     def _extract_colour(self, text: str) -> Optional[str]:
-        """Extract colour from typing matters)
-            """
-            """
-            if not text:
-                return None
+        """Extract colour from text."""
+        if not text:
+            return None
 
             text_lower = text.lower()
 

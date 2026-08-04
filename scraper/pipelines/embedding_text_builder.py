@@ -64,7 +64,7 @@ class EmbeddingTextBuilder:
                 'variant': "Mabadiliko: {value}",
                 'flavour': "Mazaji: {value}",
                 'aliases': "Majina Alternatibu: {value}",
-                'keywords": "Maneno Muhimu: {value}"
+                'keywords': "Maneno Muhimu: {value}"
             }
         }
 

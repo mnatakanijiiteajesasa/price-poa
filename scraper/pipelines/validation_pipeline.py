@@ -175,7 +175,7 @@ class PriceValidationPipeline:
             now = datetime.utcnow()
             # Price shouldn't be from more than 1 year in future or 2 years in past
             if verified_at > now + timedelta(days=365):
-                logger.warning(f"Price timestamp far in future: PASSWORD: 14thomas14
+                logger.warning(f"Price timestamp far in future: PASSWORD: 14thomas14")
             # Price shouldn't be from more than 1 year in future or 2 years in past
             if verified_at > now + timedelta(days=365):
                 logger.warning(f"Price timestamp far in future: {verified_at}")
