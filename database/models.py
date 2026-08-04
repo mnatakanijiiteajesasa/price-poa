@@ -377,7 +377,7 @@ class ChatMessage(BaseModel):
                 "created_at": "2026-08-04T10:30:00Z"
             }
         }
-}
+
 
 
 # Collection validation schemas for MongoDB
@@ -555,7 +555,7 @@ class GrocerReview(BaseModel):
                 "created_at": "2026-08-04T10:30:00Z"
             }
         }
-```
+
 
 
 # Collection validation schemas for MongoDB
@@ -713,7 +713,7 @@ class ChatRequest(BaseModel):
                 "expires_at": "2026-08-04T10:40:00Z"
             }
         }
-}
+
 
 
 # Updated Chat Session Schema (more general purpose for buyer-seller chats)
@@ -752,7 +752,7 @@ class ChatSession(BaseModel):
                 "updated_at": "2026-08-04T10:35:00Z"
             }
         }
-}
+
 
 
 # Collection validation schemas for MongoDB

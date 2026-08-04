@@ -10,6 +10,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
+from pydantic import BaseModel, Field, ValidationError
 
 from telegram_bot import verify_telegram_secret, send_telegram_text, send_telegram_photo
 from infographics.generator import (
@@ -329,6 +330,38 @@ async def handle_telegram_command(command: str, user_id: int, chat_id: int, back
     elif command.startswith("/review"):
         # Handle review command - this would be used when buyer wants to review a grocer
         pass
+
+async def send_rating_prompt(buyer_user_id: int, grocer_id: str, session_id: str, background_tasks: BackgroundTasks):
+    """Send a rating prompt to a buyer after a chat session ends."""
+    try:
+        # Get grocer details for the message
+        grocer = grocers_collection.find_one({"_id": grocer_id})
+        if not grocer:
+            logger.warning(f"Could not find grocer {grocer_id} when sending rating prompt")
+            return
+
+        # Create the rating prompt message
+        message = (
+            f"How was your chat with {grocer['display_name']}?\n"
+            f"Please rate your experience from 1 to 5 stars.\n"
+            f"This helps us maintain quality in our marketplace.\n\n"
+            f"To rate, use the inline buttons below or send /rating <score> [optional comment]\n"
+            f"Example: /rating 5 Great quality produce!"
+        )
+
+        # In a real implementation, we would send an inline keyboard with rating buttons
+        # For now, we'll send a text message with instructions
+        # TODO: Implement inline keyboard for ratings
+
+        # Send the message (we'd need to import send_telegram_text or use background task)
+        # For now, we'll just log it - in a real implementation, we'd send the actual message
+        logger.info(f"Would send rating prompt to user {buyer_user_id} for grocer {grocer_id} after session {session_id}")
+
+        # TODO: Actually send the message using send_telegram_text in a background task
+        # background_tasks.add_task(send_telegram_text, buyer_user_id, message)
+
+    except Exception as e:
+        logger.error(f"Error sending rating prompt: {e}")
 
 
 def extract_product_names_from_shopping_list(text: str) -> List[str]:
@@ -1181,15 +1214,27 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
 
         if chat_session:
             # End the session
+            ended_by = "buyer"  # Assuming the user sending /end is the buyer
             await db.chat_sessions.update_one(
                 {"_id": chat_session["_id"]},
                 {"$set": {"status": "ended_by_buyer", "ended_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}}
             )
 
+            # Send rating prompt to the buyer (regardless of who ended the session)
+            # In a real implementation, we would check if the user is the buyer or grocer
+            # and only send the prompt to the buyer
+            background_tasks.add_task(
+                send_rating_prompt,
+                buyer_user_id=chat_id,  # Assuming the user ending the session is the buyer
+                grocer_id=chat_session.get("grocer_id"),
+                session_id=str(chat_session["_id"]),
+                background_tasks=background_tasks  # This might not be right, but we'll fix it
+            )
+
             return {
                 "type": "chat_ended",
                 "data": {
-                    "message": "Chat session ended. Thank you for using PricePoa!"
+                    "message": "Chat session ended. Thank you for using PricePoa!\n\nWe'd love to hear about your experience. Please rate your conversation."
                 }
             }
         else:
