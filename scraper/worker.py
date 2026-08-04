@@ -42,6 +42,7 @@ SPIDER_NAMES = [
     'carrefour_spider',
     'quickmart_spider',
     'chandarana_spider',
+    'thebar_spider'
     # Add more spiders as they are created
 ]
 

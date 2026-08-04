@@ -470,7 +470,7 @@ async def _get_fuzzy_matches(db, query_text: str, limit: int) -> List[Dict[str, 
     return []
 
 
-async def find_product_matches(db, query_text: str, limit: int = 5) -> List[Dict[str, Any]]:
+async def find_product_matches(db, query_text: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Find up to `limit` distinct products matching a query, each with its
     cheapest current price attached. Used for single-product queries where
