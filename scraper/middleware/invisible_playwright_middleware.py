@@ -8,6 +8,7 @@ from typing import Optional, Any
 import asyncio
 import logging
 import os
+from datetime import datetime
 from invisible_playwright.async_api import async_playwright
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,10 @@ class InvisiblePlaywrightMiddleware:
             playwright_timeout = int(scrapy_timeout * 1000) if scrapy_timeout < 1000 else int(scrapy_timeout)
             await page.goto(request.url, wait_until='domcontentloaded', timeout=playwright_timeout)
 
+            # Bypass any age-verification gate (e.g. The Bar's year-of-birth gate)
+            # that would otherwise leave the page hiding its real content.
+            await self._bypass_age_gate(page)
+
             # Scroll page to bottom to trigger dynamic/lazy-loaded products
             await self._scroll_page_to_bottom(page)
 
@@ -135,6 +140,198 @@ class InvisiblePlaywrightMiddleware:
         except Exception as e:
             logger.error(f"Error rendering {request.url} with InvisiblePlaywright: {e}")
             return None
+
+    # --- Age-verification gate bypass --------------------------------------
+
+    def _year_selectors(self) -> list:
+        return [
+            'select[name*="year" i]', 'input[name*="year" i]',
+            'select[id*="year" i]', 'input[id*="year" i]',
+            'select[aria-label*="year" i]', 'input[aria-label*="year" i]',
+            'select[placeholder*="year" i]', 'input[placeholder*="year" i]',
+            'select[placeholder*="YYYY" i]', 'input[placeholder*="YYYY" i]',
+        ]
+
+    def _month_selectors(self) -> list:
+        return [
+            'select[name*="month" i]', 'input[name*="month" i]',
+            'select[id*="month" i]', 'input[id*="month" i]',
+            'select[aria-label*="month" i]', 'input[aria-label*="month" i]',
+            'select[placeholder*="month" i]', 'input[placeholder*="month" i]',
+        ]
+
+    def _day_selectors(self) -> list:
+        return [
+            'select[name*="day" i]', 'input[name*="day" i]',
+            'select[id*="day" i]', 'input[id*="day" i]',
+            'select[aria-label*="day" i]', 'input[aria-label*="day" i]',
+            'select[placeholder*="day" i]', 'input[placeholder*="day" i]',
+        ]
+
+    async def _first_visible(self, page: Any, selectors: list) -> Any:
+        """Return the first visible locator matching any selector, or None."""
+        for selector in selectors:
+            try:
+                locator = page.locator(selector).first
+                if await locator.count() and await locator.is_visible():
+                    return locator
+            except Exception:
+                continue
+        return None
+
+    async def _bypass_age_gate(self, page: Any) -> bool:
+        """
+        Detect and click through an age-verification gate by entering a birth
+        date/year comfortably over 18 years old. The Bar (ke.thebar.com) shows
+        a year-of-birth gate on first load; the backend sets a
+        'the-bar-gateway' cookie once a valid adult year is submitted.
+
+        Returns True if a gate was found and handled, False otherwise.
+        """
+        try:
+            # Give the JS app time to mount its gate before we look for it
+            await page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+        try:
+            if not await self._detect_age_gate(page):
+                return False
+
+            logger.info("Age-verification gate detected - entering an adult birth date")
+            await self._fill_birthdate(page)
+            clicked = await self._click_age_gate_button(page)
+            if not clicked:
+                logger.warning("Age gate found but no confirm button matched")
+
+            # Wait for the gate to dismiss and real content to render
+            await page.wait_for_timeout(3000)
+            return True
+        except Exception as e:
+            logger.warning(f"Age-gate bypass attempt failed: {e}")
+            return False
+
+    async def _detect_age_gate(self, page: Any) -> bool:
+        """Return True if an age-gate container or birth-date form is visible."""
+        gate_containers = [
+            '[data-testid*="age" i]',
+            '[class*="age-gate" i]', '[class*="age_gate" i]', '[class*="agegate" i]',
+            '[class*="age-verification" i]', '[class*="ageverification" i]',
+            '[class*="age-check" i]', '[id*="age-gate" i]', '[id*="age_gate" i]',
+            '[role="dialog"]',
+        ]
+        container = await self._first_visible(page, gate_containers)
+        if container is not None:
+            return True
+
+        # Fall back: a visible birth-date/year form almost certainly means a gate
+        if await self._first_visible(page, self._year_selectors()) is not None:
+            return True
+
+        return False
+
+    async def _fill_birthdate(self, page: Any) -> None:
+        """Fill day/month/year fields with a birth date over 18 years old."""
+        # A birth date comfortably over 18 in any year (born ~35 years ago)
+        year = str(datetime.now().year - 35)
+
+        year_field = await self._first_visible(page, self._year_selectors())
+        if year_field is not None:
+            await self._fill_year_field(year_field, year)
+
+        month_field = await self._first_visible(page, self._month_selectors())
+        if month_field is not None:
+            await self._fill_simple_field(month_field, '1')
+
+        day_field = await self._first_visible(page, self._day_selectors())
+        if day_field is not None:
+            await self._fill_simple_field(day_field, '15')
+
+    async def _fill_year_field(self, field: Any, year: str) -> None:
+        """Set an adult birth year on a select/input, respecting adult range."""
+        try:
+            tag = (await field.evaluate("el => el.tagName")).upper()
+            if tag == 'SELECT':
+                # Pick the option closest to our target year within the adult range
+                selected = await field.evaluate(
+                    """(sel, target) => {
+                        const thisYear = new Date().getFullYear();
+                        const maxAllowed = thisYear - 19;
+                        const adults = Array.from(sel.options).filter(o => {
+                            const n = parseInt(o.value || o.text, 10);
+                            return !Number.isNaN(n) && n >= 1900 && n <= maxAllowed;
+                        });
+                        if (adults.length === 0) return false;
+                        let best = adults[0];
+                        for (const o of adults) {
+                            const n = parseInt(o.value || o.text, 10);
+                            const bn = parseInt(best.value || best.text, 10);
+                            if (Math.abs(n - target) < Math.abs(bn - target)) best = o;
+                        }
+                        sel.value = (best.value !== '' && best.value != null) ? best.value : best.text;
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                        sel.dispatchEvent(new Event('input', { bubbles: true }));
+                        return true;
+                    }""",
+                    int(year),
+                )
+                if selected:
+                    logger.info(f"Selected adult birth year in year select")
+            else:
+                await field.fill(year)
+                logger.info(f"Filled birth year field with {year}")
+        except Exception as e:
+            logger.warning(f"Failed to fill year field: {e}")
+
+    async def _fill_simple_field(self, field: Any, value: str) -> None:
+        """Fill a month/day select or input with the given value."""
+        try:
+            tag = (await field.evaluate("el => el.tagName")).upper()
+            if tag == 'SELECT':
+                try:
+                    await field.select_option(value=value)
+                except Exception:
+                    # fall back to first option (e.g. month '1' -> 'January')
+                    await field.select_option(index=0)
+            else:
+                await field.fill(value)
+        except Exception as e:
+            logger.warning(f"Failed to fill month/day field: {e}")
+
+    async def _click_age_gate_button(self, page: Any) -> bool:
+        """Click the affirmative/confirm button of the age gate."""
+        button_selectors = [
+            'button[type="submit"]',
+            'button:has-text("Enter")',
+            'button:has-text("Confirm")',
+            'button:has-text("Continue")',
+            'button:has-text("Submit")',
+            'button:has-text("Verify")',
+            'button:has-text("Yes")',
+            'button:has-text("OK")',
+            'button:has-text("I am over 18")',
+            'button:has-text("I am 18")',
+            'button:has-text("Access")',
+            'button:has-text("Join")',
+            '[role="button"]:has-text("Enter")',
+            '[role="button"]:has-text("Confirm")',
+            '[role="button"]:has-text("Continue")',
+            '[role="button"]:has-text("Yes")',
+            'a:has-text("Enter")',
+            'a:has-text("Confirm")',
+            'a:has-text("Continue")',
+            'a:has-text("Yes")',
+        ]
+        for selector in button_selectors:
+            try:
+                locator = page.locator(selector).first
+                if await locator.count() and await locator.is_visible():
+                    await locator.click()
+                    logger.info(f"Clicked age-gate confirm button via '{selector}'")
+                    return True
+            except Exception:
+                continue
+        return False
 
     async def _scroll_page_to_bottom(self, page: Any):
         """Scroll down the page dynamically to trigger lazy-loaded catalog items."""

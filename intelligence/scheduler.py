@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """
 APScheduler configuration for periodic intelligence tasks.
-Includes product embedding indexing that runs when scrapers run.
+Keeps product embeddings indexed through the transactional outbox so Qdrant
+stays consistent with MongoDB (the outbox worker performs the actual writes).
 """
 
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.triggers.cron import CronTrigger
 import asyncio
+import time
 import sys
 import os
 
 # Add the app directory to path
 sys.path.insert(0, '/app')
 
-from intelligence.index_product_embeddings import index_product_embeddings
-from intelligence.intelligence_engine import run_intelligence_maintenance
+# Import the outbox service with a path fallback so this runs both from the
+# container (/app = intelligence package contents) and from the repo root.
+try:
+    from intelligence.outbox.outbox import EmbeddingOutboxService
+except ImportError:
+    from outbox.outbox import EmbeddingOutboxService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,45 +31,30 @@ scheduler = BackgroundScheduler()
 
 
 async def run_embedding_indexing():
-    """Run product embedding indexing."""
+    """
+    Routine backfill: enqueue any product that isn't already indexed into the
+    outbox. This complements the event-driven path (products written by the
+    scraper enqueue themselves transactionally) by catching anything written
+    outside the outbox writers (e.g. seeding, manual admin edits).
+    """
     try:
-        logger.info("Starting product embedding indexing...")
-        count = await index_product_embeddings()
-        logger.info(f"Completed product embedding indexing. Indexed {count} vectors.")
+        logger.info("Starting embedding outbox backfill...")
+        svc = EmbeddingOutboxService()
+        count = await svc.backfill_products(force=False)
+        logger.info(f"Enqueued {count} product(s) for embedding via outbox")
     except Exception as e:
-        logger.error(f"Error during product embedding indexing: {e}")
-
-
-async def run_intelligence_maintenance_job():
-    """Run intelligence maintenance tasks."""
-    try:
-        logger.info("Starting intelligence maintenance...")
-        # We need to get a database connection - this would typically come from the app
-        # For now, we'll log that this would run
-        logger.info("Intelligence maintenance would run here (requires DB connection)")
-    except Exception as e:
-        logger.error(f"Error during intelligence maintenance: {e}")
+        logger.error(f"Error during embedding outbox backfill: {e}")
 
 
 def start_scheduler():
     """Start the background scheduler with intelligence tasks."""
     try:
-        # Add job for product embedding indexing - runs every 6 hours
-        # This can be adjusted to run when scrapers finish
+        # Add job for product embedding indexing - runs every 6 hours.
         scheduler.add_job(
             func=lambda: asyncio.create_task(run_embedding_indexing()),
             trigger=IntervalTrigger(hours=6),
             id='product_embedding_indexing',
-            name='Index product embeddings in Qdrant',
-            replace_existing=True
-        )
-
-        # Add job for intelligence maintenance - runs every 12 hours
-        scheduler.add_job(
-            func=lambda: asyncio.create_task(run_intelligence_maintenance_job()),
-            trigger=IntervalTrigger(hours=12),
-            id='intelligence_maintenance',
-            name='Run intelligence maintenance tasks',
+            name='Backfill product embeddings through the outbox',
             replace_existing=True
         )
 
@@ -74,8 +64,6 @@ def start_scheduler():
 
         # Keep the script running
         try:
-            # Keep the main thread alive
-            import time
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:

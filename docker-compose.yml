@@ -3,6 +3,9 @@ services:
   mongo:
     image: mongo:6.0
     container_name: pricepoa_mongo
+    # Single-node replica set: multi-document transactions AND Change Streams
+    # (used by the embedding outbox) both require a replica set.
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -21,6 +24,30 @@ services:
       retries: 5
       start_period: 15s
 
+  # One-shot initialisation of the replica set (idempotent - safe to re-run).
+  mongo-init:
+    image: mongo:6.0
+    container_name: pricepoa_mongo_init
+    restart: "no"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      set -e;
+      echo "Waiting for mongod...";
+      until mongosh --host mongo --username "$${MONGO_INITDB_ROOT_USERNAME}" --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --quiet --eval "db.runCommand({ping:1}).ok" >/dev/null 2>&1; do sleep 2; done;
+      mongosh --host mongo --username "$${MONGO_INITDB_ROOT_USERNAME}" --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --quiet --eval "
+      var status = db.runCommand({replSetGetStatus:1});
+      if (status.ok) { print('Replica set rs0 already initialised'); }
+      else { rs.initiate({_id:'rs0', members:[{_id:0, host:'mongo:27017'}]}); print('Replica set rs0 initiated'); }
+      ";
+    networks:
+      - pricepoa_network
+
   # MONGO-EXPRESS (Dev Admin UI)
   mongo-express:
     image: mongo-express:latest
@@ -35,8 +62,8 @@ services:
     networks:
       - pricepoa_network
     depends_on:
-      mongo:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
     profiles:
       - dev
 
@@ -81,8 +108,8 @@ services:
     networks:
       - pricepoa_network
     depends_on:
-      mongo:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -109,8 +136,8 @@ services:
     networks:
       - pricepoa_network
     depends_on:
-      mongo:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
     volumes:
       - .:/app
       - /app/__pycache__
@@ -135,8 +162,8 @@ services:
     networks:
       - pricepoa_network
     depends_on:
-      mongo:
-        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
     volumes:
       - ./intelligence:/app
       - ./database:/app/database

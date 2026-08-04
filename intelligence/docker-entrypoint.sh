@@ -9,6 +9,11 @@ if [ -f "/app/initialize_intelligence.py" ]; then
     python /app/initialize_intelligence.py
 fi
 
+# Start the embedding outbox worker (Change Streams + reconciliation sweep).
+# Keeps Qdrant consistent with MongoDB products; resumes safely after restarts.
+echo "Starting embedding outbox worker..."
+python -m outbox.worker &
+
 # Start the scheduler for periodic tasks
 echo "Starting APScheduler for periodic intelligence tasks..."
 python -m scheduler &
