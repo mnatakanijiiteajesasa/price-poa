@@ -8,6 +8,7 @@ import logging
 from typing import Optional, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from intelligence.nlp.search_pipeline import search_products
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -177,6 +178,127 @@ def parse_price_value(price_str: str) -> float:
     except ValueError:
         return 0.0
 
+
+async def get_products_by_ids(
+    db: AsyncIOMotorDatabase,
+    product_ids: list[str],
+) -> list[Dict[str, Any]]:
+    """
+    Fetch multiple products while preserving the order of product_ids.
+    """
+
+    object_ids = []
+
+    for pid in product_ids:
+        try:
+            object_ids.append(ObjectId(pid))
+        except Exception:
+            continue
+
+    products = await db.products.find(
+        {
+            "_id": {
+                "$in": object_ids
+            }
+        }
+    ).to_list(length=None)
+
+    lookup = {
+        str(product["_id"]): product
+        for product in products
+    }
+
+    return [
+        lookup[pid]
+        for pid in product_ids
+        if pid in lookup
+    ]
+
+
+async def find_product_matches(
+    db: AsyncIOMotorDatabase,
+    query_text: str,
+    limit: int = 10,
+) -> list[Dict[str, Any]]:
+    """
+    Return multiple matching products using the unified search pipeline.
+
+    Responsibilities:
+    1. Call search_products()
+    2. Fetch MongoDB documents
+    3. Attach cheapest current price
+    4. Return formatted results
+
+    No searching, ranking, fuzzy matching or vector search happens here.
+    """
+
+    if not query_text or not query_text.strip():
+        return []
+
+    try:
+        # Ask the pipeline for the best products
+        search_results = await search_products(
+            db,
+            query_text,
+            limit=limit,
+        )
+
+        if not search_results:
+            return []
+
+        # Preserve pipeline ranking
+        ordered_ids = [
+            r["product_id"]
+            for r in search_results
+            if r.get("product_id")
+        ]
+
+        products = await get_products_by_ids(db, ordered_ids)
+
+        results = []
+
+        for product in products:
+
+            prices = await get_product_prices(db, product)
+
+            if not prices or not prices.get("stores"):
+                continue
+
+            cheapest = prices["stores"][0]
+
+            results.append({
+                "product_id": str(product["_id"]),
+                "name": product.get("name", "Unknown"),
+                "price_label": cheapest["price"],
+                "price_value": parse_price_value(cheapest["price"]),
+                "store_name": cheapest["name"],
+                "offer": cheapest["offer"],
+                "confidence": next(
+                    (
+                        r.get("final_score", 0.0)
+                        for r in search_results
+                        if r["product_id"] == str(product["_id"])
+                    ),
+                    0.0,
+                ),
+                "match_type": next(
+                    (
+                        r.get("match_type", "pipeline")
+                        for r in search_results
+                        if r["product_id"] == str(product["_id"])
+                    ),
+                    "pipeline",
+                ),
+            })
+
+        return results
+
+    except Exception:
+        logger.exception(
+            "Failed to retrieve product matches for query '%s'",
+            query_text,
+        )
+        return []
 
 # Backward compatibility alias
 find_product_fuzzy = find_product
