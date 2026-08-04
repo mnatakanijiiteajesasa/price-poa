@@ -319,12 +319,12 @@ QUERY_LOG_INDEXES = [
 
 
 # Chat Session Schema
-class ChatSession(BaseModel):
-    """Chat session schema for the chat_sessions collection."""
-    topic: str = Field(..., min_length=1, max_length=200, description="Chat session topic (e.g., 'GTA 6')")
-    description: Optional[str] = Field(None, max_length=500, description="Description of the chat session")
-    is_active: bool = Field(default=True, description="Whether chat session is currently active")
-    participant_count: int = Field(default=0, description="Number of participants in the session")
+class ChatRoom(BaseModel):
+    """Chat room schema for the chat_rooms collection (topic-based group chat, e.g. 'GTA 6')."""
+    topic: str = Field(..., min_length=1, max_length=200, description="Chat room topic (e.g., 'GTA 6')")
+    description: Optional[str] = Field(None, max_length=500, description="Description of the chat room")
+    is_active: bool = Field(default=True, description="Whether chat room is currently active")
+    participant_count: int = Field(default=0, description="Number of participants in the room")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -384,24 +384,19 @@ class ChatMessage(BaseModel):
 CHAT_SESSION_VALIDATOR = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["topic"],
+        "required": ["buyer_user_id", "grocer_id"],
         "properties": {
-            "topic": {
-                "bsonType": "string",
-                "description": "Chat session topic - must be a string and is required"
-            },
-            "description": {
-                "bsonType": "string",
-                "description": "Description of the chat session"
-            },
-            "is_active": {
-                "bsonType": "bool",
-                "description": "Whether chat session is currently active"
-            },
-            "participant_count": {
+            "buyer_user_id": {
                 "bsonType": "int",
-                "minimum": 0,
-                "description": "Number of participants in the session"
+                "description": "Telegram user ID of the buyer - must be an integer and is required"
+            },
+            "grocer_id": {
+                "bsonType": "string",
+                "description": "Reference to grocer document ID - must be a string and is required"
+            },
+            "status": {
+                "bsonType": "string",
+                "description": "Session status: active, ended_by_buyer, ended_by_grocer, expired"
             },
             "created_at": {
                 "bsonType": "date",
@@ -410,6 +405,44 @@ CHAT_SESSION_VALIDATOR = {
             "updated_at": {
                 "bsonType": "date",
                 "description": "Timestamp when chat session was last updated"
+            },
+            "ended_at": {
+                "bsonType": "date",
+                "description": "Timestamp when chat session was ended"
+            }
+        }
+    }
+}
+
+CHAT_ROOM_VALIDATOR = {
+    "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["topic"],
+        "properties": {
+            "topic": {
+                "bsonType": "string",
+                "description": "Chat room topic - must be a string and is required"
+            },
+            "description": {
+                "bsonType": "string",
+                "description": "Description of the chat room"
+            },
+            "is_active": {
+                "bsonType": "bool",
+                "description": "Whether chat room is currently active"
+            },
+            "participant_count": {
+                "bsonType": "int",
+                "minimum": 0,
+                "description": "Number of participants in the room"
+            },
+            "created_at": {
+                "bsonType": "date",
+                "description": "Timestamp when chat room was created"
+            },
+            "updated_at": {
+                "bsonType": "date",
+                "description": "Timestamp when chat room was last updated"
             }
         }
     }
@@ -449,18 +482,11 @@ CHAT_MESSAGE_VALIDATOR = {
     }
 }
 
-# Index definitions for chat collections
-CHAT_SESSION_INDEXES = [
+# Index definitions for chat room collections
+CHAT_ROOM_INDEXES = [
     ([("topic", 1)], {"unique": False}),
     ([("is_active", 1)], {"unique": False}),
     ([("created_at", -1)], {"unique": False}),  # Descending for recent-first queries
-]
-
-CHAT_MESSAGE_INDEXES = [
-    ([("session_id", 1)], {"unique": False}),
-    ([("user_id", 1)], {"unique": False}),
-    ([("created_at", -1)], {"unique": False}),  # Descending for recent-first queries
-    ([("session_id", 1), ("created_at", -1)], {"unique": False}),  # For session-specific queries over time
 ]
 
 

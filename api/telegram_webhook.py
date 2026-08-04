@@ -22,25 +22,19 @@ from database.connection import get_database
 from intelligence.nlp.product_matcher import find_product_fuzzy
 from query_engine import find_product
 from database.models import (
-    ChatSession, ChatMessage, Grocer, ChatRequest,
+    ChatSession, ChatRoom, ChatMessage, Grocer, ChatRequest,
     GrocerReview, GROCER_VALIDATOR, GROCER_REVIEW_VALIDATOR,
     CHAT_SESSION_VALIDATOR, CHAT_MESSAGE_VALIDATOR
 )
 
 logger = logging.getLogger("uvicorn.error")
 
-# Create router
+# Router
 router = APIRouter()
 
-# Initialize database connection
-db = get_database()
-
-# Collections
-grocers_collection = db.grocers
-reviews_collection = db.grocer_reviews
-sessions_collection = db.chat_sessions
-messages_collection = db.chat_messages
-requests_collection = db.chat_requests
+# NOTE: get_database() is an async coroutine function (Motor). It must be
+# awaited before use, so every handler below resolves the db lazily via
+# `db = await get_database()` instead of sharing a module-level connection.
 
 # Webhook Models
 class TelegramUpdate(BaseModel):
@@ -75,23 +69,32 @@ class RatingPromptRequest(BaseModel):
     chat_ended_at: datetime
 
 # Helper Functions
-def verify_session_completion(session_id: str) -> bool:
+def _to_object_id(value: str):
+    """Best-effort conversion of a Mongo document ID string to ObjectId."""
+    try:
+        return ObjectId(value)
+    except Exception:
+        return value
+
+async def verify_session_completion(session_id: str) -> bool:
     """Verify that a session exists and has been completed."""
-    session = sessions_collection.find_one({"_id": session_id})
+    db = await get_database()
+    session = await db.chat_sessions.find_one({"_id": session_id})
     if not session:
         return False
 
     # Check if session is ended
     return session.get("status") in ["ended_by_buyer", "ended_by_grocer", "expired"]
 
-def check_review_rate_limit(grocer_id: str, reviewer_user_id: int) -> bool:
+async def check_review_rate_limit(grocer_id: str, reviewer_user_id: int) -> bool:
     """
     Check if reviewer has already reviewed this grocer in the last 30 days.
     Returns True if they CAN review (not rate limited), False if they cannot.
     """
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
 
-    existing_review = reviews_collection.find_one({
+    db = await get_database()
+    existing_review = await db.grocer_reviews.find_one({
         "grocer_id": grocer_id,
         "reviewer_user_id": reviewer_user_id,
         "created_at": {"$gte": thirty_days_ago}
@@ -99,7 +102,7 @@ def check_review_rate_limit(grocer_id: str, reviewer_user_id: int) -> bool:
 
     return existing_review is None
 
-def calculate_credibility_score(grocer_id: str) -> float:
+async def calculate_credibility_score(grocer_id: str) -> float:
     """
     Calculate credibility score for a grocer based on:
     - Average rating (40%)
@@ -110,12 +113,13 @@ def calculate_credibility_score(grocer_id: str) -> float:
 
     Returns score from 0.0 to 5.0
     """
-    grocer = grocers_collection.find_one({"_id": grocer_id})
+    db = await get_database()
+    grocer = await db.grocers.find_one({"_id": _to_object_id(grocer_id)})
     if not grocer:
         return 0.0
 
     # Get reviews for this grocer
-    reviews = list(reviews_collection.find({"grocer_id": grocer_id}))
+    reviews = await db.grocer_reviews.find({"grocer_id": grocer_id}).to_list(length=None)
 
     if not reviews:
         # New grocer - base score on verification status only
@@ -172,21 +176,23 @@ def calculate_credibility_score(grocer_id: str) -> float:
     # Ensure score is between 0 and 5
     return min(max(credibility_score, 0.0), 5.0)
 
-def update_grocer_credibility_score(grocer_id: str):
+async def update_grocer_credibility_score(grocer_id: str):
     """Update the credibility score for a grocer in the database."""
-    score = calculate_credibility_score(grocer_id)
-    result = grocers_collection.update_one(
-        {"_id": grocer_id},
+    score = await calculate_credibility_score(grocer_id)
+    db = await get_database()
+    result = await db.grocers.update_one(
+        {"_id": _to_object_id(grocer_id)},
         {"$set": {"credibility_score": score, "updated_at": datetime.utcnow()}}
     )
     logger.info(f"Updated credibility score for grocer {grocer_id}: {score}")
     return score
 
-def update_review_stats(grocer_id: str):
+async def update_review_stats(grocer_id: str):
     """Update the grocer's review statistics (average rating and review count)."""
     try:
+        db = await get_database()
         # Get all reviews for this grocer
-        reviews = list(reviews_collection.find({"grocer_id": grocer_id}))
+        reviews = await db.grocer_reviews.find({"grocer_id": grocer_id}).to_list(length=None)
 
         if reviews:
             total_rating = sum(review["rating"] for review in reviews)
@@ -194,8 +200,8 @@ def update_review_stats(grocer_id: str):
             review_count = len(reviews)
 
             # Update grocer document
-            grocers_collection.update_one(
-                {"_id": grocer_id},
+            await db.grocers.update_one(
+                {"_id": _to_object_id(grocer_id)},
                 {
                     "$set": {
                         "rating_average": round(avg_rating, 2),
@@ -207,8 +213,8 @@ def update_review_stats(grocer_id: str):
             logger.info(f"Updated review stats for grocer {grocer_id}: avg={avg_rating}, count={review_count}")
         else:
             # Reset to defaults if no reviews
-            grocers_collection.update_one(
-                {"_id": grocer_id},
+            await db.grocers.update_one(
+                {"_id": _to_object_id(grocer_id)},
                 {
                     "$set": {
                         "rating_average": 0.0,
@@ -221,22 +227,23 @@ def update_review_stats(grocer_id: str):
         logger.error(f"Error updating review stats for grocer {grocer_id}: {e}")
 
 # Background task for nightly credibility score recalculation
-def recalculate_all_credibility_scores():
+async def recalculate_all_credibility_scores():
     """Nightly job to recalculate credibility scores for all grocers."""
     try:
         logger.info("Starting nightly credibility score recalculation")
 
+        db = await get_database()
         # Get all grocers
-        grocers = grocers_collection.find({})
+        grocers = await db.grocers.find({}).to_list(length=None)
         updated_count = 0
 
         for grocer in grocers:
-            grocer_id = grocer["_id"]
-            score = calculate_credibility_score(grocer_id)
+            grocer_id = str(grocer["_id"])
+            score = await calculate_credibility_score(grocer_id)
 
             # Update the grocer's credibility score
-            grocers_collection.update_one(
-                {"_id": grocer_id},
+            await db.grocers.update_one(
+                {"_id": grocer["_id"]},
                 {"$set": {"credibility_score": score, "updated_at": datetime.utcnow()}}
             )
             updated_count += 1
@@ -249,18 +256,19 @@ def recalculate_all_credibility_scores():
 # Anti-Gaming: Isolation Forest for detecting review bursts
 # Note: In a real implementation, we would use scikit-learn's IsolationForest
 # For now, we'll implement a simplified version that flags suspicious patterns
-def detect_review_bursts(grocer_id: str) -> bool:
+async def detect_review_bursts(grocer_id: str) -> bool:
     """
     Detect suspicious review bursts that might indicate gaming.
     Returns True if suspicious activity is detected.
     """
     try:
+        db = await get_database()
         # Get reviews for this grocer in the last 7 days
         seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        recent_reviews = list(reviews_collection.find({
+        recent_reviews = await db.grocer_reviews.find({
             "grocer_id": grocer_id,
             "created_at": {"$gte": seven_days_ago}
-        }))
+        }).to_list(length=None)
 
         # If more than 5 reviews in 7 days from new/no-review accounts, flag for review
         if len(recent_reviews) > 5:
@@ -269,7 +277,7 @@ def detect_review_bursts(grocer_id: str) -> bool:
             for review in recent_reviews:
                 reviewer_id = review["reviewer_user_id"]
                 # Check if reviewer has only left 1 review total (their first review)
-                total_reviews_by_user = reviews_collection.count_documents(
+                total_reviews_by_user = await db.grocer_reviews.count_documents(
                     {"reviewer_user_id": reviewer_id}
                 )
                 if total_reviews_by_user == 1:
@@ -285,11 +293,12 @@ def detect_review_bursts(grocer_id: str) -> bool:
         logger.error(f"Error detecting review bursts for grocer {grocer_id}: {e}")
         return False
 
-def flag_grocer_for_review(grocer_id: str, reason: str):
+async def flag_grocer_for_review(grocer_id: str, reason: str):
     """Flag a grocer for manual review due to suspicious activity."""
     try:
-        grocers_collection.update_one(
-            {"_id": grocer_id},
+        db = await get_database()
+        await db.grocers.update_one(
+            {"_id": _to_object_id(grocer_id)},
             {
                 "$set": {
                     "is_flagged": True,
@@ -331,37 +340,81 @@ async def handle_telegram_command(command: str, user_id: int, chat_id: int, back
         # Handle review command - this would be used when buyer wants to review a grocer
         pass
 
-async def send_rating_prompt(buyer_user_id: int, grocer_id: str, session_id: str, background_tasks: BackgroundTasks):
-    """Send a rating prompt to a buyer after a chat session ends."""
+async def send_rating_prompt(buyer_user_id: int, grocer_id: str, session_id: str):
+    """Send a rating prompt to the buyer after a chat session ends."""
     try:
         # Get grocer details for the message
-        grocer = grocers_collection.find_one({"_id": grocer_id})
+        db = await get_database()
+        grocer = await db.grocers.find_one({"_id": _to_object_id(grocer_id)})
         if not grocer:
             logger.warning(f"Could not find grocer {grocer_id} when sending rating prompt")
             return
 
+        grocer_name = grocer.get("display_name") or "the grocer"
+
         # Create the rating prompt message
         message = (
-            f"How was your chat with {grocer['display_name']}?\n"
+            f"How was your chat with {grocer_name}?\n"
             f"Please rate your experience from 1 to 5 stars.\n"
             f"This helps us maintain quality in our marketplace.\n\n"
-            f"To rate, use the inline buttons below or send /rating <score> [optional comment]\n"
+            f"To rate, send /rating <score> [optional comment]\n"
             f"Example: /rating 5 Great quality produce!"
         )
 
-        # In a real implementation, we would send an inline keyboard with rating buttons
-        # For now, we'll send a text message with instructions
-        # TODO: Implement inline keyboard for ratings
-
-        # Send the message (we'd need to import send_telegram_text or use background task)
-        # For now, we'll just log it - in a real implementation, we'd send the actual message
-        logger.info(f"Would send rating prompt to user {buyer_user_id} for grocer {grocer_id} after session {session_id}")
-
-        # TODO: Actually send the message using send_telegram_text in a background task
-        # background_tasks.add_task(send_telegram_text, buyer_user_id, message)
+        # Only the buyer receives the rating prompt
+        send_telegram_text(buyer_user_id, message)
+        logger.info(f"Sent rating prompt to buyer {buyer_user_id} for grocer {grocer_id} after session {session_id}")
 
     except Exception as e:
         logger.error(f"Error sending rating prompt: {e}")
+
+
+async def handle_callback_query(callback_query: Dict[str, Any]):
+    """Handle Telegram callback queries, e.g. rating button presses."""
+    try:
+        data = callback_query.get("data", "")
+        chat = callback_query.get("message", {}).get("chat", {})
+        chat_id = chat.get("id")
+        user_id = callback_query.get("from", {}).get("id")
+
+        if not data.startswith("rate:"):
+            logger.info(f"Ignoring unsupported callback query: {data}")
+            return
+
+        try:
+            _, score_str, session_id = data.split(":")
+            score = int(score_str)
+        except (ValueError, IndexError):
+            logger.warning(f"Malformed rating callback data: {data}")
+            return
+
+        if score not in range(1, 6):
+            logger.warning(f"Rating out of range in callback data: {data}")
+            return
+
+        db = await get_database()
+        session = await db.chat_sessions.find_one({"_id": ObjectId(session_id)})
+        if not session:
+            send_telegram_text(chat_id, "Sorry, we couldn't find that chat session.")
+            return
+
+        grocer_id = str(session["grocer_id"]) if session.get("grocer_id") else ""
+        review = GrocerReview(
+            grocer_id=grocer_id,
+            reviewer_user_id=user_id,
+            rating=score,
+            comment=None,
+            session_id=session_id,
+            created_at=datetime.now(timezone.utc),
+        )
+        await db.grocer_reviews.insert_one(review.dict(by_alias=True))
+        await update_grocer_credibility_score(grocer_id)
+        await update_review_stats(grocer_id)
+
+        send_telegram_text(chat_id, f"Thanks for rating {score}/5! Your feedback helps our marketplace.")
+        logger.info(f"Recorded rating {score}/5 from user {user_id} for grocer {grocer_id}")
+    except Exception as e:
+        logger.error(f"Error handling callback query: {e}")
 
 
 def extract_product_names_from_shopping_list(text: str) -> List[str]:
@@ -937,7 +990,7 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
     }
 
 
-async def process_telegram_message(chat_id: int, text: str) -> dict:
+async def process_telegram_message(chat_id: int, text: str, background_tasks: Optional[BackgroundTasks] = None) -> dict:
     """
     Process an incoming Telegram message and return structured data for infographic.
     This is where the NLP parser will go (Phase 2).
@@ -947,30 +1000,30 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
     # Handle GTA 6 special chat dimension
     text_lower = text.lower().strip()
     if text_lower in ["gta 6", "gta6", "grand theft auto 6", "grand theft auto six"]:
-        # Check if there's an active GTA 6 chat session
+        # Check if there's an active GTA 6 chat room
         db = await get_database()
 
-        # Look for existing active GTA 6 session
-        existing_session = await db.chat_sessions.find_one({
+        # Look for existing active GTA 6 chat room
+        existing_room = await db.chat_rooms.find_one({
             "topic": {"$regex": "^gta 6$", "$options": "i"},
             "is_active": True
         })
 
-        if existing_session:
-            # Join existing session
-            session_id = str(existing_session["_id"])
+        if existing_room:
+            # Join existing chat room
+            room_id = str(existing_room["_id"])
 
             # Add user as participant if not already counted
             # For simplicity, we'll just increment participant count (in a real app,
-            # we'd check if user is already in the session)
-            await db.chat_sessions.update_one(
-                {"_id": ObjectId(session_id)},
+            # we'd check if user is already in the room)
+            await db.chat_rooms.update_one(
+                {"_id": ObjectId(room_id)},
                 {"$inc": {"participant_count": 1}, "$set": {"updated_at": datetime.now(timezone.utc)}}
             )
 
-            # Save the message to the chat session
+            # Save the message to the chat room
             chat_message = ChatMessage(
-                session_id=session_id,
+                session_id=room_id,
                 user_id=chat_id,
                 message_text=text,
                 created_at=datetime.now(timezone.utc)
@@ -981,14 +1034,14 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
             return {
                 "type": "gta6_chat",
                 "data": {
-                    "session_id": session_id,
+                    "session_id": room_id,
                     "message": f"Welcome to the GTA 6 chat dimension! You're now chatting with other GTA 6 enthusiasts. Your message: '{text}'",
-                    "participant_count": existing_session["participant_count"] + 1
+                    "participant_count": existing_room["participant_count"] + 1
                 }
             }
         else:
-            # Create new GTA 6 chat session
-            chat_session = ChatSession(
+            # Create new GTA 6 chat room
+            chat_room = ChatRoom(
                 topic="GTA 6",
                 description="Chat room for discussing Grand Theft Auto 6",
                 is_active=True,
@@ -997,12 +1050,12 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
                 updated_at=datetime.now(timezone.utc)
             )
 
-            result = await db.chat_sessions.insert_one(chat_session.dict(by_alias=True))
-            session_id = str(result.inserted_id)
+            result = await db.chat_rooms.insert_one(chat_room.dict(by_alias=True))
+            room_id = str(result.inserted_id)
 
             # Save the initial message
             chat_message = ChatMessage(
-                session_id=session_id,
+                session_id=room_id,
                 user_id=chat_id,
                 message_text=text,
                 created_at=datetime.now(timezone.utc)
@@ -1013,7 +1066,7 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
             return {
                 "type": "gta6_chat",
                 "data": {
-                    "session_id": session_id,
+                    "session_id": room_id,
                     "message": f"Welcome to the GTA 6 chat dimension! You're the first to join this chat. Your message: '{text}'",
                     "participant_count": 1
                 }
@@ -1196,40 +1249,31 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
                 }
             }
 
-    # Handle /end command to end chat sessions
+    # Handle /end command to end chat sessions (buyer or grocer)
     if text.startswith("/end"):
-        # Check if user is in an active chat session
         db = await get_database()
 
-        # Find active chat sessions where user is either buyer or grocer
-        # First check as buyer in ChatSession
+        # A session can only be ended by the buyer or the grocer in it.
+        # First check if the user is the buyer in an active session.
         chat_session = await db.chat_sessions.find_one({
-            "$or": [
-                {"buyer_user_id": chat_id},
-                # Note: We'd need to join with grocers table to check grocer's telegram_user_id
-                # For simplicity, we'll just check buyer side for now
-            ],
+            "buyer_user_id": chat_id,
             "status": "active"
         })
 
         if chat_session:
-            # End the session
-            ended_by = "buyer"  # Assuming the user sending /end is the buyer
             await db.chat_sessions.update_one(
                 {"_id": chat_session["_id"]},
                 {"$set": {"status": "ended_by_buyer", "ended_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}}
             )
 
-            # Send rating prompt to the buyer (regardless of who ended the session)
-            # In a real implementation, we would check if the user is the buyer or grocer
-            # and only send the prompt to the buyer
-            background_tasks.add_task(
-                send_rating_prompt,
-                buyer_user_id=chat_id,  # Assuming the user ending the session is the buyer
-                grocer_id=chat_session.get("grocer_id"),
-                session_id=str(chat_session["_id"]),
-                background_tasks=background_tasks  # This might not be right, but we'll fix it
-            )
+            # Buyer ended the session - send the rating prompt to the buyer
+            grocer_id = str(chat_session["grocer_id"]) if chat_session.get("grocer_id") else ""
+            session_id = str(chat_session["_id"])
+
+            if background_tasks:
+                background_tasks.add_task(send_rating_prompt, buyer_user_id=chat_id, grocer_id=grocer_id, session_id=session_id)
+            else:
+                await send_rating_prompt(buyer_user_id=chat_id, grocer_id=grocer_id, session_id=session_id)
 
             return {
                 "type": "chat_ended",
@@ -1237,33 +1281,43 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
                     "message": "Chat session ended. Thank you for using PricePoa!\n\nWe'd love to hear about your experience. Please rate your conversation."
                 }
             }
-        else:
-            # Check if user is a grocer in an active session (simplified)
-            grocer = await db.grocers.find_one({"telegram_user_id": chat_id})
-            if grocer:
-                # Find active session where this grocer is participating
-                chat_session = await db.chat_sessions.find_one({
-                    "grocer_id": str(grocer["_id"]),
-                    "status": "active"
-                })
 
-                if chat_session:
-                    await db.chat_sessions.update_one(
-                        {"_id": chat_session["_id"]},
-                        {"$set": {"status": "ended_by_grocer", "ended_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}}
-                    )
+        # Otherwise, check if the user is the grocer in an active session.
+        grocer = await db.grocers.find_one({"telegram_user_id": chat_id})
+        if grocer:
+            chat_session = await db.chat_sessions.find_one({
+                "grocer_id": str(grocer["_id"]),
+                "status": "active"
+            })
 
-                    return {
-                        "type": "chat_ended",
-                        "data": {
-                            "message": "Chat session ended. Thank you for using PricePoa!"
-                        }
+            if chat_session:
+                await db.chat_sessions.update_one(
+                    {"_id": chat_session["_id"]},
+                    {"$set": {"status": "ended_by_grocer", "ended_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}}
+                )
+
+                # The rating prompt goes to the BUYER only - never to the grocer
+                buyer_user_id = chat_session.get("buyer_user_id")
+                grocer_id = str(chat_session["grocer_id"]) if chat_session.get("grocer_id") else ""
+                session_id = str(chat_session["_id"])
+
+                if buyer_user_id:
+                    if background_tasks:
+                        background_tasks.add_task(send_rating_prompt, buyer_user_id=buyer_user_id, grocer_id=grocer_id, session_id=session_id)
+                    else:
+                        await send_rating_prompt(buyer_user_id=buyer_user_id, grocer_id=grocer_id, session_id=session_id)
+
+                return {
+                    "type": "chat_ended",
+                    "data": {
+                        "message": "Chat session ended. Thank you for using PricePoa!"
                     }
+                }
 
-            return {
-                "type": "not_found",
-                "data": {"message": "You are not currently in an active chat session."}
-            }
+        return {
+            "type": "not_found",
+            "data": {"message": "You are not currently in an active chat session."}
+        }
 
     # Enhanced logic: Check for shopping keywords OR multiple product terms
     shopping_keywords = ["list", "basket", "shopping", "buy", "get", "shop", "market"]
@@ -1350,6 +1404,7 @@ async def process_telegram_message(chat_id: int, text: str) -> dict:
 @router.post("/webhook/telegram")
 async def telegram_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_telegram_bot_api_secret_token: Optional[str] = Header(None),
 ):
     """
@@ -1377,7 +1432,7 @@ async def telegram_webhook(
 
     # Handle callback queries (for rating buttons)
     if callback_query:
-        await handle_callback_query(callback_query, background_tasks)
+        await handle_callback_query(callback_query)
         return JSONResponse(status_code=200, content={"status": "accepted"})
 
     if not message:
@@ -1405,7 +1460,7 @@ async def telegram_webhook(
 
     # Process the message
     try:
-        processed = await process_telegram_message(chat_id, text)
+        processed = await process_telegram_message(chat_id, text, background_tasks)
     except Exception as e:
         logger.error(f"Error processing message from {chat_id} (IP: {client_ip}): {e}")
         fallback_text = "Sorry, our service is temporarily unavailable. Please try again later."
