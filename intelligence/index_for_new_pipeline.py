@@ -2,10 +2,18 @@ import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from intelligence.nlp.search_pipeline.vector_search import EnhancedVectorSearchService
 
+# Load environment variables
+load_dotenv()
+
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://host.docker.internal:27017")
+MONGODB_DB = os.getenv("MONGODB_DB", "pricepoa")
+QDRANT_HOST = os.getenv("QDRANT_HOST", "host.docker.internal")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+
 async def index_products():
     # Connect to MongoDB
-    client = AsyncIOMotorClient("mongodb://localhost:27017")
-    db = client["pricepoa"]
+    client = AsyncIOMotorClient(MONGODB_URI)
+    db = client[MONGODB_DB]
 
     # Initialize the enhanced vector search service
     vector_service = EnhancedVectorSearchService()
