@@ -2,7 +2,13 @@ beautifulsoup4
 scrapy
 playwright
 motor
+pymongo
 numpy
+scikit-learn
+pandas
+rapidfuzz
+scipy
+jellyfish
 apscheduler
 pydantic
 python-dotenv
