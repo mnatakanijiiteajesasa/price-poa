@@ -92,17 +92,14 @@ class ChandaranaSpider(BasePricePoaSpider):
                             offers = item.get('offers', {})
                             price = offers.get('price')
                             if name and price:
-                                yield {
-                                    'product_name': name.strip(),
-                                    'store_chain': self.store_chain,
-                                    'store_branch': response.meta.get('store_branch', self.default_store_branch),
-                                    'price_kes': str(price),
-                                    'source': 'chandarana_online',
-                                    'is_promotional': False,
-                                    'promotion_details': None,
-                                    'response_url': response.url,
-                                    'category': response.meta.get('category', 'General')
-                                }
+                                yield self.build_item(
+                                    product_name=name.strip(),
+                                    store_branch=response.meta.get('store_branch', self.default_store_branch),
+                                    price_kes=str(price),
+                                    source='chandarana_online',
+                                    response_url=response.url,
+                                    category=response.meta.get('category', 'General'),
+                                )
                                 return
                 except Exception as e:
                     logger.debug(f"JSON-LD parsing block error: {e}")
@@ -151,17 +148,16 @@ class ChandaranaSpider(BasePricePoaSpider):
                     '.badge-offer::text'
                 ])
 
-            yield {
-                'product_name': product_name,
-                'store_chain': self.store_chain,
-                'store_branch': response.meta.get('store_branch', self.default_store_branch),
-                'price_kes': price_text,
-                'source': 'chandarana_online',
-                'is_promotional': is_promotional,
-                'promotion_details': promotion_details,
-                'response_url': response.url,
-                'category': category
-            }
+            yield self.build_item(
+                product_name=product_name,
+                store_branch=response.meta.get('store_branch', self.default_store_branch),
+                price_kes=price_text,
+                source='chandarana_online',
+                is_promotional=is_promotional,
+                promotion_details=promotion_details,
+                response_url=response.url,
+                category=category,
+            )
 
         except Exception as e:
             logger.error(f"Error parsing Chandarana product {response.url}: {e}", exc_info=True)
