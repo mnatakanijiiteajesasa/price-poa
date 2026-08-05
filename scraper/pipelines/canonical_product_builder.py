@@ -5,7 +5,7 @@ Converts extracted attributes into canonical product representation.
 from typing import List, Optional
 from dataclasses import dataclass, field
 from .models import CanonicalProduct, ExtractedAttributes
-
+import re
 
 @dataclass
 class CanonicalizationRules:

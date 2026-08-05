@@ -4,7 +4,7 @@ End-to-end test for the NormalizationPipeline.
 This test:
 - Uses mocked MongoDB collections.
 - Uses a mocked Outbox service.
-- Runs the complete normalization flow.
+- Runs the complete normalization flow.dock
 - Prints the normalized output instead of persisting data.
 """
 
@@ -12,7 +12,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from scraper.pipelines.normalization_pipeline import NormalizationPipeline
+from pipelines.normalization_pipeline import NormalizationPipeline
 
 
 # Mock Mongo Collections
