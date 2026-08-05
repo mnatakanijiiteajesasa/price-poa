@@ -11,7 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 import asyncio
 
 # Import the intelligence components
-from anomaly_detection.isolation_forest_detector import (
+from .anomaly_detection.isolation_forest_detector import (
     check_price_anomalies
 )
 from product_recommendations.cosine_similarity_recommender import (

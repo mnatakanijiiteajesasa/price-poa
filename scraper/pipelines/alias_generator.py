@@ -5,7 +5,7 @@ Generates alternative names and variations for products.
 from typing import List, Set
 from dataclasses import dataclass
 from .models import CanonicalProduct
-
+from typing import Optional
 
 @dataclass
 class AliasGeneratorConfig:

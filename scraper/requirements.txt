@@ -2,6 +2,7 @@ beautifulsoup4
 scrapy
 playwright
 motor
+numpy
 apscheduler
 pydantic
 python-dotenv
