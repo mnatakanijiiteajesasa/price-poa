@@ -16,15 +16,24 @@ class ExtractionRules:
         "broadways", "bidco", "brookside", "naivas", "carrefour", "quickmart",
         "daisy", "kelloggs", "nestle", "pampers", "huggies", "unilever", "cadbury",
         "kapa", "soko", "jogoo", "pembe", "exe", "chapa mandashi", "ketepa", "kericho gold",
-        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi"
+        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi", "daima", "always", 
+        "dove", "fair & lovely", "lifebuoy", "sunlight", "tide", "omo", "surf", "airwick", "persil",
+        "colgate", "pepsodent", "sensodyne", "closeup", "aquafresh", "listerine", "garnier", "nivea",
+        "vaseline", "johnson & johnson", "pampers", "huggies", "mamy poko", "himalaya", "herbal essences",
+        "tropical", "nivea", "loreal", "maybelline", "revlon", "mac", "clinique", "estee lauder", "shiseido",
+        "candybury", "hershey's", "mars", "snickers", "twix", "kitkat", "bounty", "milky way", "m&m's", "cadbury dairy milk",
+        "oreo", "lays", "pringles", "doritos", "cheetos", "fritos", "tostitos", "cheetos", "cheetos puffs", "cheetos crunchy", "cheetos flamin' hot", "cheetos cheesy",
+        "cheetos jalapeno", "cheetos spicy", "cheetos sweet", "cheetos sour cream", "cheetos barbecue", "cheetos ranch", "cheetos buffalo", "cheetos honey mustard", 
+        "cheetos garlic parmesan", "cheetos chili lime", "cheetos nacho cheese", "cheetos cheddar", "cheetos mozzarella", "cheetos pepper jack", "cheetos smoked gouda", "cheetos truffle", "cheetos white cheddar",
+        "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold",
     ])
 
     # Common categories
     known_categories: List[str] = field(default_factory=lambda: [
-        "milk", "bread", "sugar", "flour", "rice", "maize", "unga", "salt",
+        "milk", "bread", "sugar", "maize flour", "rice", "maize", "unga", "salt",
         "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
-        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco",
-        "medicine", "drugs", "pharmacy", "cosmetics", "beauty",
+        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt"
+        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereal", "biscuits", "snacks", "chocolate",
         "electronics", "phones", "computers", "clothing", "shoes"
     ])
 
@@ -147,7 +156,11 @@ class AttributeExtractor:
                 # Try to find subcategory (more specific terms)
                 subcategory = None
                 for subcat in self.rules.known_categories:
-                    if subcat != category and subcat in text_lower:
+                    if subcat == category:
+                        continue
+                    if subcat in category or category in subcat:
+                        continue # avoids sefl matching by skipping overlapping items
+                    if subcat in text_lower:
                         subcategory = subcat
                         break
                 return category, subcategory
@@ -253,16 +266,16 @@ class AttributeExtractor:
         if not text:
             return None
 
-            text_lower = text.lower()
+        text_lower = text.lower()
 
-            colours = [
-                'white', 'black', 'red', 'blue', 'green', 'yellow', 'brown', 'orange',
-                'purple', 'pink', 'grey', 'gray', 'silver', 'gold', 'transparent',
-                'clear', 'natural'
-            ]
+        colours = [
+            'white', 'black', 'red', 'blue', 'green', 'yellow', 'brown', 'orange',
+            'purple', 'pink', 'grey', 'gray', 'silver', 'gold', 'transparent',
+            'clear', 'natural'
+        ]
 
-            for colour in colours:
-                if colour in text_lower:
-                    return colour
+        for colour in colours:
+            if colour in text_lower:
+                return colour
 
-            return None
+        return None

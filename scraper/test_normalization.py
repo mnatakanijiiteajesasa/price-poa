@@ -94,7 +94,7 @@ async def main():
         },
 
         {
-            "product_name": "Daima Strawberry Yogurt 400g",
+            "product_name": "Daima Strawberry Yoghurt 400g",
             "price_kes": 120,
             "store_chain": "Carrefour",
             "store_branch": "Garden City",
