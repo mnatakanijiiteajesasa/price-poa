@@ -81,7 +81,7 @@ sudo docker compose logs -f scraper
 
 To trigger an immediate scraping run of all active spiders and bypass the scheduler:
 ```bash
-sudo docker compose run --rm scraper python worker.py --mode once
+sudo docker compose run -d --rm scraper python scraper/worker.py --mode once
 ```
 ### Manually triggering one scraper (e.g., the bar spider)
 ```bash

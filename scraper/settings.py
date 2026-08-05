@@ -60,6 +60,7 @@ EXTENSIONS = {
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
     'pipelines.normalization_pipeline.NormalizationPipeline': 300,
+    'pipelines.store_resolution_pipeline.StoreResolutionPipeline': 200,
     'pipelines.validation_pipeline.PriceValidationPipeline': 400,
 }
 

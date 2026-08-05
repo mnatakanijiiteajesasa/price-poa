@@ -193,7 +193,7 @@ class NormalizationPipeline:
         Returns:
             Product ID if found/created, None otherwise
         """
-        if not self.db:
+        if self.db is None:
             logger.warning("Database not initialized")
             return None
 
