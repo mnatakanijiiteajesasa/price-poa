@@ -81,15 +81,15 @@ class BasePricePoaSpider(Spider):
         so required fields (verified_at, store_chain, etc.) can't be
         silently omitted.
         """
-    item = {
-        'store_chain': self.store_chain,
-        'store_branch': self.default_store_branch or 'Online Store',
-        'verified_at': datetime.now(timezone.utc).isoformat(),
-        'is_promotional': False,
-        'promotion_details': None,
-    }
-    item.update(fields)  # caller-supplied fields override defaults
-    return item
+        item = {
+            'store_chain': self.store_chain,
+            'store_branch': self.default_store_branch or 'Online Store',
+            'verified_at': datetime.now(timezone.utc).isoformat(),
+            'is_promotional': False,
+            'promotion_details': None,
+        }
+        item.update(fields)  # caller-supplied fields override defaults
+        return item
 
 
     def start_requests(self) -> Generator[scrapy.Request, None, None]:

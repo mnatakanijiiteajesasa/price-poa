@@ -25,16 +25,17 @@ class ExtractionRules:
         "oreo", "lays", "pringles", "doritos", "cheetos", "fritos", "tostitos", "cheetos", "cheetos puffs", "cheetos crunchy", "cheetos flamin' hot", "cheetos cheesy",
         "cheetos jalapeno", "cheetos spicy", "cheetos sweet", "cheetos sour cream", "cheetos barbecue", "cheetos ranch", "cheetos buffalo", "cheetos honey mustard", 
         "cheetos garlic parmesan", "cheetos chili lime", "cheetos nacho cheese", "cheetos cheddar", "cheetos mozzarella", "cheetos pepper jack", "cheetos smoked gouda", "cheetos truffle", "cheetos white cheddar",
-        "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold",
+        "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold", "Delamere", "Arla", "Kenchic", "Tusker", "Chrome",
+        "General Meakins", "Kenya Cane", "Eabl"
     ])
 
     # Common categories
     known_categories: List[str] = field(default_factory=lambda: [
-        "milk", "bread", "sugar", "maize flour", "rice", "maize", "unga", "salt",
+        "milk", "bread", "sugar", "maize flour", "rice", "maize", "unga", "salt", "spirits", "wine", "beer", "cognac", "brandy"
         "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
         "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt"
-        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereal", "biscuits", "snacks", "chocolate",
-        "electronics", "phones", "computers", "clothing", "shoes"
+        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereals", "biscuits", "snacks", "chocolate",
+        "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices"
     ])
 
     # Unit patterns
@@ -138,34 +139,32 @@ class AttributeExtractor:
             return matched_text  # fallback
         return None
 
-    def _extract_category(self, text: str) -> tuple[Optional[str], Optional[str]]:
-        """
-        Extract category and subcategory from text.
 
-        Returns:
-            Tuple of (category, subcategory)
-        """
+    def _extract_category(self, text: str) -> tuple[Optional[str], Optional[str]]:
         if not text:
             return None, None
 
         text_lower = text.lower()
 
-        # Look for known categories
+        matches = []
         for category in self.rules.known_categories:
-            if category in text_lower:
-                # Try to find subcategory (more specific terms)
-                subcategory = None
-                for subcat in self.rules.known_categories:
-                    if subcat == category:
-                        continue
-                    if subcat in category or category in subcat:
-                        continue # avoids sefl matching by skipping overlapping items
-                    if subcat in text_lower:
-                        subcategory = subcat
-                        break
-                return category, subcategory
+            pattern = r'\b' + re.escape(category) + r'\b'
+            if re.search(pattern, text_lower):
+                matches.append(category)
 
-        return None, None
+        if not matches:
+            return None, None
+
+        # Longest match wins as primary category (handles "maize flour" vs "maize")
+        category = max(matches, key=len)
+        subcategory = None
+        for subcat in matches:
+            if subcat != category and subcat not in category and category not in subcat:
+                subcategory = subcat
+                break
+
+        return category, subcategory
+
 
     def _extract_variant_flavour(self, text: str, brand: Optional[str], category: Optional[str]) -> tuple[Optional[str], Optional[str]]:
         """
