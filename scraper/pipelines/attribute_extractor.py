@@ -35,7 +35,7 @@ class ExtractionRules:
         "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
         "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt"
         "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereals", "biscuits", "snacks", "chocolate",
-        "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices"
+        "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices", "diaper"
     ])
 
     # Unit patterns
