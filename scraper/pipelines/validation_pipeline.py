@@ -73,7 +73,6 @@ class PriceValidationPipeline:
     def _validate_required_fields(self, item: Dict) -> None:
         """Validate that all required fields are present and non-empty."""
         required_fields = {
-            'product_id': 'Product ID',
             'store_id': 'Store ID',
             'price_kes': 'Price (KES)',
             'source': 'Source',

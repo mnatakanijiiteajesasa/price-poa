@@ -61,11 +61,12 @@ MONGODB_BUFFER_SIZE = 10
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
+    'pipelines.store_resolution_pipeline.StoreResolutionPipeline': 100,
+    'pipelines.validation_pipeline.PriceValidationPipeline': 200,
     'pipelines.normalization_pipeline.NormalizationPipeline': 300,
-    'pipelines.store_resolution_pipeline.StoreResolutionPipeline': 200,
-    'pipelines.validation_pipeline.PriceValidationPipeline': 400,
-    'pipelines.mongodb_pipeline.MongoDBPipeline': 500,
+    'pipelines.mongodb_pipeline.MongoDBPipeline': 400,
 }
+
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
