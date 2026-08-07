@@ -26,7 +26,7 @@ class ExtractionRules:
         "cheetos jalapeno", "cheetos spicy", "cheetos sweet", "cheetos sour cream", "cheetos barbecue", "cheetos ranch", "cheetos buffalo", "cheetos honey mustard", 
         "cheetos garlic parmesan", "cheetos chili lime", "cheetos nacho cheese", "cheetos cheddar", "cheetos mozzarella", "cheetos pepper jack", "cheetos smoked gouda", "cheetos truffle", "cheetos white cheddar",
         "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold", "Delamere", "Arla", "Kenchic", "Tusker", "Chrome",
-        "General Meakins", "Kenya Cane", "Eabl"
+        "General Meakins", "Kenya Cane", "Eabl", "dairyland", "Kasuku", "Trust", "KCC", "Kiss", "Rough rider"
     ])
 
     # Common categories
@@ -35,7 +35,8 @@ class ExtractionRules:
         "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
         "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt"
         "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereals", "biscuits", "snacks", "chocolate",
-        "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices", "diaper"
+        "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices", "diaper",
+        "books", "stationary", "hardware", "condoms", "toys", "games", "furniture", "appliances", "kitchenware", "utensils", "tools", "accessories", "jewelry", "watches", "perfumes", "sauces", "condiments"
     ])
 
     # Unit patterns
