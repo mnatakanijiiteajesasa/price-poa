@@ -79,7 +79,7 @@ AUTOTHROTTLE_DEBUG = False
 
 # Enable and configure HTTP caching (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/http-cache.html
-HTTPCACHE_ENABLED = True
+HTTPCACHE_ENABLED = False
 HTTPCACHE_EXPIRATION_SECS = 0
 HTTPCACHE_DIR = 'httpcache'
 HTTPCACHE_IGNORE_HTTP_CODES = []
