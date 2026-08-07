@@ -84,6 +84,14 @@ class MongoDBPipeline:
         Returns:
             The item (unchanged)
         """
+        logger.info(
+            "MONGODB PIPELINE ITEM: product_id=%s store_id=%s price=%s source=%s",
+            item.get('product_id'),
+            item.get('store_id'),
+            item.get('price_kes'),
+            item.get('source')
+        )
+
         # Convert scrapy.Item to dict for uniform handling
         if hasattr(item, 'fields'):
             item_dict = dict(item)
@@ -107,13 +115,14 @@ class MongoDBPipeline:
 
         try:
             buffer_to_flush = self.buffer.copy()
-            self.buffer.copy()
             self.buffer.clear()
 
             if not buffer_to_flush:
                 return
 
             logger.debug(f"Flushing {len(buffer_to_flush)} items to MongoDB")
+
+            logger.info(f"Flushing {len(buffer_to_flush)} items to prices collection")
 
             # Prepare bulk operations for prices collection
             operations = []

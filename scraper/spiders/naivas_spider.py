@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 import re
 import html
 import logging
-from base_spider import BasePricePoaSpider
+from scraper.base_spider import BasePricePoaSpider
 
 logger = logging.getLogger(__name__)
 

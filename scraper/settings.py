@@ -5,8 +5,8 @@ import os
 
 BOT_NAME = 'pricepoa_scraper'
 
-SPIDER_MODULES = ['spiders']
-NEWSPIDER_MODULE = 'spiders'
+SPIDER_MODULES = ['scraper.spiders']
+NEWSPIDER_MODULE = 'scraper.spiders'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False
@@ -56,12 +56,15 @@ EXTENSIONS = {
     'scrapy.extensions.telnet.TelnetConsole': None,
 }
 
+MONGODB_BUFFER_SIZE = 10
+
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
     'pipelines.normalization_pipeline.NormalizationPipeline': 300,
     'pipelines.store_resolution_pipeline.StoreResolutionPipeline': 200,
     'pipelines.validation_pipeline.PriceValidationPipeline': 400,
+    'pipelines.mongodb_pipeline.MongoDBPipeline': 500,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)

@@ -5,7 +5,7 @@ import scrapy
 from scrapy.http import Response
 from typing import Generator, Dict, Any, Optional
 import logging
-from base_spider import BasePricePoaSpider
+from scraper.base_spider import BasePricePoaSpider
 
 logger = logging.getLogger(__name__)
 
