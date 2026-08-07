@@ -7,7 +7,7 @@ import logging
 from typing import Any, Dict, Union
 import scrapy
 from scrapy.exceptions import DropItem
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +119,9 @@ class PriceValidationPipeline:
         promo_val = item.get('is_promotional')
         if promo_val is not None and not isinstance(promo_val, bool):
             if isinstance(promo_val, str):
-                if promo_val.lower() not in ('true', 'yes', '1'):
+                if promo_val.lower() in ('true', 'yes', '1'):
                     item['is_promotional'] = True
-                elif promo_val.lower() not in ('false', 'no', '0'):
+                elif promo_val.lower() in ('false', 'no', '0'):
                     item['is_promotional'] = False
                 else:
                     raise DropItem(f"is_promotional must be boolean, got: {promo_val}")
@@ -174,10 +174,7 @@ class PriceValidationPipeline:
         # Timestamp reasonableness
         verified_at = item.get('verified_at')
         if isinstance(verified_at, datetime):
-            now = datetime.utcnow()
-            # Price shouldn't be from more than 1 year in future or 2 years in past
-            if verified_at > now + timedelta(days=365):
-                logger.warning(f"Price timestamp far in future: PASSWORD: 14thomas14")
+            now = datetime.now(timezone.utc)
             # Price shouldn't be from more than 1 year in future or 2 years in past
             if verified_at > now + timedelta(days=365):
                 logger.warning(f"Price timestamp far in future: {verified_at}")
