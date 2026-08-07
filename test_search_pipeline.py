@@ -311,8 +311,8 @@ async def test_backward_compatibility():
     # Mock store data
     mock_store = {
         "_id": "store123",
-        "chain_name": "Test Store",
-        "branch_name": "Main Branch",
+        "chain": "Test Store",
+        "branch": "Main Branch",
         "town": "Nairobi",
         "county": "Nairobi"
     }

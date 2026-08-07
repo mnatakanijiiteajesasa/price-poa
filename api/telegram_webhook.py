@@ -875,7 +875,7 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
 
     for store in stores:
         store_id = str(store["_id"])
-        store_name = f"{store['chain_name']} - {store['branch_name']}"
+        store_name = f"{store['chain']} - {store['branch']}"
 
         # Initialize for this store
         store_items[store_id] = []

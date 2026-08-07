@@ -157,8 +157,8 @@ async def get_recent_prices(limit: int = 10):
                     "verified_at": 1,
                     "is_promotional": 1,
                     "product_name": {"$arrayElemAt": ["$product.name", 0]},
-                    "store_chain": {"$arrayElemAt": ["$store.chain_name", 0]},
-                    "store_branch": {"$arrayElemAt": ["$store.branch_name", 0]}
+                    "store_chain": {"$arrayElemAt": ["$store.chain", 0]},
+                    "store_branch": {"$arrayElemAt": ["$store.branch", 0]}
                 }
             }
         ]
