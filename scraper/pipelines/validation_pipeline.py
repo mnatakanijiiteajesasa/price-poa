@@ -7,7 +7,7 @@ import logging
 from typing import Any, Dict, Union
 import scrapy
 from scrapy.exceptions import DropItem
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,6 @@ class PriceValidationPipeline:
     def _validate_required_fields(self, item: Dict) -> None:
         """Validate that all required fields are present and non-empty."""
         required_fields = {
-            'product_id': 'Product ID',
             'store_id': 'Store ID',
             'price_kes': 'Price (KES)',
             'source': 'Source',
@@ -86,25 +85,22 @@ class PriceValidationPipeline:
                 raise DropItem(f"Missing or empty required field: {field_name}")
 
     def _validate_data_types(self, item: Dict) -> None:
-        """Validate data types and formats without modifying the item."""
-        # Validate price_kes is a positive number
+        """Validate data types and formats, coercing to canonical types in place"""
+        # Validate price_kes is a positive number and coerce prices to float
         price_val = item.get('price_kes')
         if price_val is not None:
             try:
-                # Allow both int and float, but must be convertible to float
                 price_float = float(price_val)
                 if price_float <= 0:
                     raise DropItem(f"Price must be positive, got: {price_val}")
-                # Optionally check for reasonable precision (e.g., 2 decimal places)
-                # but we don't modify the item
+                item['price_kes'] = price_float  # Coerce to float for consistency
             except (ValueError, TypeError):
                 raise DropItem(f"Invalid price value: {price_val}")
 
-        # Validate verified_at is a datetime object or a parseable string
+        # Validate and coerce verified_at to datetime 
         verified_at = item.get('verified_at')
         if verified_at is not None:
             if isinstance(verified_at, str):
-                # Try to parse as datetime - if it fails, we'll drop
                 try:
                     # This is just validation; we don't modify the item
                     parsed = datetime.fromisoformat(verified_at.replace('Z', '+00:00'))
@@ -114,15 +110,19 @@ class PriceValidationPipeline:
                         parsed = datetime.strptime(verified_at, '%Y-%m-%d %H:%M:%S')
                     except ValueError:
                         raise DropItem(f"Invalid verified_at timestamp format: {verified_at}")
+                item['verified_at'] = parsed
             elif not isinstance(verified_at, datetime):
                 raise DropItem(f"verified_at must be datetime or string, got: {type(verified_at)}")
 
-        # Validate is_promotional is boolean
+        # Validate and convert is_promotional to boolean
         promo_val = item.get('is_promotional')
         if promo_val is not None and not isinstance(promo_val, bool):
-            # Allow string representations of boolean for validation, but don't convert
             if isinstance(promo_val, str):
-                if promo_val.lower() not in ('true', 'false', 'yes', 'no', '1', '0'):
+                if promo_val.lower() in ('true', 'yes', '1'):
+                    item['is_promotional'] = True
+                elif promo_val.lower() in ('false', 'no', '0'):
+                    item['is_promotional'] = False
+                else:
                     raise DropItem(f"is_promotional must be boolean, got: {promo_val}")
             else:
                 # Try to see if it's numeric 0/1
@@ -130,6 +130,7 @@ class PriceValidationPipeline:
                     val = int(promo_val)
                     if val not in (0, 1):
                         raise DropItem(f"is_promotional must be boolean, got: {promo_val}")
+                    item['is_promotional'] = bool(val)
                 except (ValueError, TypeError):
                     raise DropItem(f"is_promotional must be boolean, got: {promo_val}")
 
@@ -172,10 +173,7 @@ class PriceValidationPipeline:
         # Timestamp reasonableness
         verified_at = item.get('verified_at')
         if isinstance(verified_at, datetime):
-            now = datetime.utcnow()
-            # Price shouldn't be from more than 1 year in future or 2 years in past
-            if verified_at > now + timedelta(days=365):
-                logger.warning(f"Price timestamp far in future: PASSWORD: 14thomas14")
+            now = datetime.now(timezone.utc)
             # Price shouldn't be from more than 1 year in future or 2 years in past
             if verified_at > now + timedelta(days=365):
                 logger.warning(f"Price timestamp far in future: {verified_at}")

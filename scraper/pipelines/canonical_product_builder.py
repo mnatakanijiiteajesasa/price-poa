@@ -5,7 +5,7 @@ Converts extracted attributes into canonical product representation.
 from typing import List, Optional
 from dataclasses import dataclass, field
 from .models import CanonicalProduct, ExtractedAttributes
-
+import re
 
 @dataclass
 class CanonicalizationRules:
@@ -97,54 +97,35 @@ class CanonicalProductBuilder:
         )
 
     def _build_canonical_name(self, attributes: ExtractedAttributes) -> str:
-        """
-        Build a canonical product name from attributes.
-
-        Examples:
-        - Brand: Brookside, Category: Milk, Size: 500, Unit: ml -> "Brookside Milk 500ml"
-        - Brand: Bread, Category: Bread -> "Bread"
-        """
         parts = []
+        seen = set()  # track lowercased tokens already used
 
-        # Add brand if not generic
-        if attributes.brand and attributes.brand.lower() != "unknown":
-            parts.append(attributes.brand)
+        def add_part(value: Optional[str]):
+            if value and value.lower() not in ('unknown', '') and value.lower() not in seen:
+                parts.append(value)
+                seen.add(value.lower())
 
-        # Add category
-        if attributes.category:
-            parts.append(attributes.category)
+        add_part(attributes.brand)
+        add_part(attributes.category)
+        add_part(attributes.subcategory)
 
-        # Add subcategory if different from category
-        if attributes.subcategory and attributes.subcategory != attributes.category:
-            parts.append(attributes.subcategory)
-
-        # Add size and unit if available
         if attributes.size is not None and attributes.unit:
-            # Format size nicely (remove .0 if integer)
             size_str = str(int(attributes.size)) if attributes.size == int(attributes.size) else str(attributes.size)
-            parts.append(f"{size_str}{attributes.unit}")
+            add_part(f"{size_str}{attributes.unit}")
 
-        # Add variant if meaningful
-        if attributes.variant and attributes.variant.lower() not in ['unknown', '']:
-            parts.append(attributes.variant)
+        add_part(attributes.variant)
+        add_part(attributes.flavour)
 
-        # Add flavour if meaningful
-        if attributes.flavour and attributes.flavour.lower() not in ['unknown', '']:
-            parts.append(attributes.flavour)
-
-        # Join parts and clean up
         name = " ".join(parts)
-
-        # Remove extra whitespace and truncate if needed
         name = re.sub(r'\s+', ' ', name).strip()
         if len(name) > self.rules.max_name_length:
             name = name[:self.rules.max_name_length].rstrip()
 
-        # If we ended up with empty name, fall back to cleaned text
         if not name and attributes.cleaned_text:
             name = attributes.cleaned_text[:self.rules.max_name_length]
 
         return name or "Unknown Product"
+
 
     def _generate_aliases(self, attributes: ExtractedAttributes, canonical_name: str) -> List[str]:
         """

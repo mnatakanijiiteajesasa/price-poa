@@ -49,8 +49,8 @@ class Product(BaseModel):
 # Store Schema
 class Store(BaseModel):
     """Store schema for the stores collection."""
-    chain_name: str = Field(..., min_length=1, max_length=100, description="Store chain name (e.g., Naivas)")
-    branch_name: str = Field(..., min_length=1, max_length=200, description="Specific branch name")
+    chain: str = Field(..., min_length=1, max_length=100, description="Store chain name (e.g., Naivas)")
+    branch: str = Field(..., min_length=1, max_length=200, description="Specific branch name")
     town: str = Field(..., min_length=1, max_length=100, description="Town/city location")
     county: str = Field(..., min_length=1, max_length=100, description="County location")
     gps_latitude: Optional[float] = Field(None, description="GPS latitude coordinate")
@@ -61,7 +61,7 @@ class Store(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    @validator('chain_name', 'branch_name', 'town', 'county')
+    @validator('chain', 'branch', 'town', 'county')
     def field_must_not_be_empty(cls, v):
         if not v or not v.strip():
             raise ValueError('Field cannot be empty')
@@ -85,8 +85,8 @@ class Store(BaseModel):
         }
         schema_extra = {
             "example": {
-                "chain_name": "Naivas",
-                "branch_name": "Naivas Mega",
+                "chain": "Naivas",
+                "branch": "Naivas Mega",
                 "town": "Nairobi",
                 "county": "Nairobi",
                 "gps_latitude": -1.2921,
@@ -190,13 +190,13 @@ PRODUCT_VALIDATOR = {
 STORE_VALIDATOR = {
     "$jsonSchema": {
         "bsonType": "object",
-        "required": ["chain_name", "branch_name", "town", "county"],
+        "required": ["chain", "branch", "town", "county"],
         "properties": {
-            "chain_name": {
+            "chain": {
                 "bsonType": "string",
                 "description": "Store chain name - must be a string and is required"
             },
-            "branch_name": {
+            "branch": {
                 "bsonType": "string",
                 "description": "Specific branch name - must be a string and is required"
             },
@@ -292,10 +292,10 @@ PRODUCT_INDEXES = [
 ]
 
 STORE_INDEXES = [
-    ([("chain_name", 1)], {"unique": False}),
+    ([("chain", 1)], {"unique": False}),
     ([("town", 1)], {"unique": False}),
     ([("county", 1)], {"unique": False}),
-    ([("chain_name", 1), ("town", 1)], {"unique": False}),
+    ([("chain", 1), ("town", 1)], {"unique": False}),
     ([("is_active", 1)], {"unique": False}),
 ]
 

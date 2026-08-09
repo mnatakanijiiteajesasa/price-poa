@@ -305,7 +305,7 @@ async def get_product_prices(
         if not store:
             continue  # orphaned reference, skip rather than crash
         store_entries.append({
-            "name": f"{store['chain_name']} - {store['branch_name']}",
+            "name": f"{store['chain']} - {store['branch']}",
             "price": f"{price['price_kes']:.0f} KES",
             "offer": bool(price.get("is_promotional", False)),
         })

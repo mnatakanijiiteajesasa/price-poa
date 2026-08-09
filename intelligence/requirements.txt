@@ -5,6 +5,7 @@ scikit-learn
 numpy
 pandas
 scipy
+jellyfish
 rapidfuzz
 python-Levenshtein
 qdrant-client

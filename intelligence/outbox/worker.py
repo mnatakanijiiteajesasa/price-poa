@@ -128,7 +128,7 @@ class EmbeddingOutboxWorker:
             logger.exception(f"[outbox] failed product {product_id} (intent={intent}): {e}")
             await self.outbox.mark_failed(item_id, e)
 
-    async def _upsert_product(self, product_id: str) -> List[int]:
+    async def _upsert_product(self, product_id: str) -> list[int]:
         """Delete stale points for a product, then upsert its current variants."""
         product = await self.outbox.db.products.find_one({"_id": ObjectId(product_id)})
         if product is None:
@@ -143,7 +143,7 @@ class EmbeddingOutboxWorker:
             logger.info(f"[outbox] upserted {len(points)} vector(s) for product {product_id}")
         return point_ids
 
-    async def _delete_product(self, product_id: str) -> List[int]:
+    async def _delete_product(self, product_id: str) -> list[int]:
         await asyncio.to_thread(self.embedder.delete_for_product, product_id)
         return []
 

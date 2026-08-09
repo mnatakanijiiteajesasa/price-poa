@@ -175,25 +175,13 @@ class NormalizationPipeline:
 
         return attributes
 
-    def _build_canonical_product(self, attributes: ExtractedAttributes) -> CanonicalProduct:
-        """Build a canonical product representation from extracted attributes."""
-        # Start with cleaned name or fallback to original
-        base_name = attributes.cleaned_text or attributes.raw_text
+    def _build_canonical_product(
+    self,
+    attributes: ExtractedAttributes
+) -> CanonicalProduct:
+    #Build a canonical product representation from extracted attribute.
+        return self.canonical_builder.build_canonical_product(attributes)
 
-        # Build canonical product
-        canonical = self.canonical_builder.build_canonical_product(
-            name=base_name,
-            brand=attributes.brand,
-            category=attributes.category,
-            subcategory=attributes.subcategory,
-            size=attributes.size,
-            unit=attributes.unit,
-            variant=attributes.variant,
-            flavour=attributes.flavour,
-            package_type=attributes.package_type
-        )
-
-        return canonical
 
     async def _get_or_create_canonical_product(self,
                                               canonical_product: CanonicalProduct,
@@ -205,7 +193,7 @@ class NormalizationPipeline:
         Returns:
             Product ID if found/created, None otherwise
         """
-        if not self.db:
+        if self.db is None:
             logger.warning("Database not initialized")
             return None
 
@@ -244,7 +232,7 @@ class NormalizationPipeline:
                     # for now we might put it in a custom field or ignore
                     "sizes_variants": [str(canonical_product.size)] if canonical_product.size else [],
                     "store_links": {},  # Will be populated by price pipeline
-                    # TODO: Add subcategory, variant, flavour fields to product schema if needed
+                    # Add subcategory, variant, flavour fields to product schema if needed
                 }
 
                 product_id = await self.outbox.insert_product_with_outbox(

@@ -445,6 +445,10 @@ def generate_product_options_image(data: dict) -> bytes:
 
     subtitle = f"Verified {date_str}"
     title = f'Results for "{query_text}"'
+    
+    # Sort by actual price ascending — search relevance decides *which*
+    # products appear, but price decides display order and the BEST PRICE badge.
+    options = sorted(options, key=lambda o: o.get("price_value", float("inf")))
 
     max_value = max((o["price_value"] for o in options), default=1) or 1
 

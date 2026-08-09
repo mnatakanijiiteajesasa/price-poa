@@ -5,14 +5,14 @@ import os
 
 BOT_NAME = 'pricepoa_scraper'
 
-SPIDER_MODULES = ['spiders']
-NEWSPIDER_MODULE = 'spiders'
+SPIDER_MODULES = ['scraper.spiders']
+NEWSPIDER_MODULE = 'scraper.spiders'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
-CONCURRENT_REQUESTS = 6
+CONCURRENT_REQUESTS = 3
 
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
@@ -56,12 +56,17 @@ EXTENSIONS = {
     'scrapy.extensions.telnet.TelnetConsole': None,
 }
 
+MONGODB_BUFFER_SIZE = 10
+
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
+    'pipelines.store_resolution_pipeline.StoreResolutionPipeline': 100,
+    'pipelines.validation_pipeline.PriceValidationPipeline': 200,
     'pipelines.normalization_pipeline.NormalizationPipeline': 300,
-    'pipelines.validation_pipeline.PriceValidationPipeline': 400,
+    'pipelines.mongodb_pipeline.MongoDBPipeline': 400,
 }
+
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
@@ -78,7 +83,7 @@ AUTOTHROTTLE_DEBUG = False
 
 # Enable and configure HTTP caching (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/http-cache.html
-HTTPCACHE_ENABLED = True
+HTTPCACHE_ENABLED = False
 HTTPCACHE_EXPIRATION_SECS = 0
 HTTPCACHE_DIR = 'httpcache'
 HTTPCACHE_IGNORE_HTTP_CODES = []

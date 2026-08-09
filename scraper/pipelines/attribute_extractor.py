@@ -16,16 +16,27 @@ class ExtractionRules:
         "broadways", "bidco", "brookside", "naivas", "carrefour", "quickmart",
         "daisy", "kelloggs", "nestle", "pampers", "huggies", "unilever", "cadbury",
         "kapa", "soko", "jogoo", "pembe", "exe", "chapa mandashi", "ketepa", "kericho gold",
-        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi"
+        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi", "daima", "always", 
+        "dove", "fair & lovely", "lifebuoy", "sunlight", "tide", "omo", "surf", "airwick", "persil",
+        "colgate", "pepsodent", "sensodyne", "closeup", "aquafresh", "listerine", "garnier", "nivea",
+        "vaseline", "johnson & johnson", "pampers", "huggies", "mamy poko", "himalaya", "herbal essences",
+        "tropical", "nivea", "loreal", "maybelline", "revlon", "mac", "clinique", "estee lauder", "shiseido",
+        "candybury", "hershey's", "mars", "snickers", "twix", "kitkat", "bounty", "milky way", "m&m's", "cadbury dairy milk",
+        "oreo", "lays", "pringles", "doritos", "cheetos", "fritos", "tostitos", "cheetos", "cheetos puffs", "cheetos crunchy", "cheetos flamin' hot", "cheetos cheesy",
+        "cheetos jalapeno", "cheetos spicy", "cheetos sweet", "cheetos sour cream", "cheetos barbecue", "cheetos ranch", "cheetos buffalo", "cheetos honey mustard", 
+        "cheetos garlic parmesan", "cheetos chili lime", "cheetos nacho cheese", "cheetos cheddar", "cheetos mozzarella", "cheetos pepper jack", "cheetos smoked gouda", "cheetos truffle", "cheetos white cheddar",
+        "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold", "Delamere", "Arla", "Kenchic", "Tusker", "Chrome",
+        "General Meakins", "Kenya Cane", "Eabl", "dairyland", "Kasuku", "Trust", "KCC", "Kiss", "Rough rider"
     ])
 
     # Common categories
     known_categories: List[str] = field(default_factory=lambda: [
-        "milk", "bread", "sugar", "flour", "rice", "maize", "unga", "salt",
+        "milk", "bread", "sugar", "maize flour", "rice", "maize", "unga", "salt", "spirits", "wine", "beer", "cognac", "brandy"
         "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
-        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco",
-        "medicine", "drugs", "pharmacy", "cosmetics", "beauty",
-        "electronics", "phones", "computers", "clothing", "shoes"
+        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt"
+        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereals", "biscuits", "snacks", "chocolate",
+        "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices", "diaper",
+        "books", "stationary", "hardware", "condoms", "toys", "games", "furniture", "appliances", "kitchenware", "utensils", "tools", "accessories", "jewelry", "watches", "perfumes", "sauces", "condiments"
     ])
 
     # Unit patterns
@@ -129,30 +140,32 @@ class AttributeExtractor:
             return matched_text  # fallback
         return None
 
-    def _extract_category(self, text: str) -> tuple[Optional[str], Optional[str]]:
-        """
-        Extract category and subcategory from text.
 
-        Returns:
-            Tuple of (category, subcategory)
-        """
+    def _extract_category(self, text: str) -> tuple[Optional[str], Optional[str]]:
         if not text:
             return None, None
 
         text_lower = text.lower()
 
-        # Look for known categories
+        matches = []
         for category in self.rules.known_categories:
-            if category in text_lower:
-                # Try to find subcategory (more specific terms)
-                subcategory = None
-                for subcat in self.rules.known_categories:
-                    if subcat != category and subcat in text_lower:
-                        subcategory = subcat
-                        break
-                return category, subcategory
+            pattern = r'\b' + re.escape(category) + r'\b'
+            if re.search(pattern, text_lower):
+                matches.append(category)
 
-        return None, None
+        if not matches:
+            return None, None
+
+        # Longest match wins as primary category (handles "maize flour" vs "maize")
+        category = max(matches, key=len)
+        subcategory = None
+        for subcat in matches:
+            if subcat != category and subcat not in category and category not in subcat:
+                subcategory = subcat
+                break
+
+        return category, subcategory
+
 
     def _extract_variant_flavour(self, text: str, brand: Optional[str], category: Optional[str]) -> tuple[Optional[str], Optional[str]]:
         """
@@ -253,16 +266,16 @@ class AttributeExtractor:
         if not text:
             return None
 
-            text_lower = text.lower()
+        text_lower = text.lower()
 
-            colours = [
-                'white', 'black', 'red', 'blue', 'green', 'yellow', 'brown', 'orange',
-                'purple', 'pink', 'grey', 'gray', 'silver', 'gold', 'transparent',
-                'clear', 'natural'
-            ]
+        colours = [
+            'white', 'black', 'red', 'blue', 'green', 'yellow', 'brown', 'orange',
+            'purple', 'pink', 'grey', 'gray', 'silver', 'gold', 'transparent',
+            'clear', 'natural'
+        ]
 
-            for colour in colours:
-                if colour in text_lower:
-                    return colour
+        for colour in colours:
+            if colour in text_lower:
+                return colour
 
-            return None
+        return None

@@ -834,7 +834,7 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
         }
 
     # Get all active stores first
-    stores_cursor = db.stores.find({"is_active": True})
+    stores_cursor = db.stores.find()
     stores = await stores_cursor.to_list(length=None)
 
     if not stores:
@@ -875,7 +875,7 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
 
     for store in stores:
         store_id = str(store["_id"])
-        store_name = f"{store['chain_name']} - {store['branch_name']}"
+        store_name = f"{store['chain']} - {store['branch']}"
 
         # Initialize for this store
         store_items[store_id] = []
@@ -1028,7 +1028,6 @@ async def get_shopping_list_data(db, products: List[Dict[str, Any]]) -> Dict[str
 async def process_telegram_message(chat_id: int, text: str, background_tasks: Optional[BackgroundTasks] = None) -> dict:
     """
     Process an incoming Telegram message and return structured data for infographic.
-    This is where the NLP parser will go (Phase 2).
     """
     logger.info(f"Processing message from {chat_id}: {text}")
 
