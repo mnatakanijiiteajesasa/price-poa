@@ -12,6 +12,21 @@ from pymongo import UpdateOne
 import asyncio
 from datetime import datetime
 
+# Import Redis cache for invalidation
+try:
+    import sys
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.abspath(os.path.join(current_dir, '..', '..', 'api')))
+    from redis_cache import redis_cache, make_prices_key, make_product_key
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    # Create a mock redis_cache that does nothing
+    class MockRedisCache:
+        async def delete(self, key): pass
+    redis_cache = MockRedisCache()
+
 logger = logging.getLogger(__name__)
 
 
@@ -178,6 +193,11 @@ class MongoDBPipeline:
                             f"{result.modified_count} modified, "
                             f"{len(operations) - result.upserted_count - result.modified_count} duplicates"
                         )
+
+                        # Invalidate Redis cache for updated products
+                        if REDIS_AVAILABLE and (result.upserted_count > 0 or result.modified_count > 0):
+                            await self._invalidate_price_cache(buffer_to_flush)
+
                         break  # Success, exit retry loop
                     except Exception as e:
                         if attempt == max_retries - 1:
@@ -194,6 +214,39 @@ class MongoDBPipeline:
             # In case of catastrophic error, we clear buffer to avoid infinite retry loop
             # Putting items back could cause repeated failures
             self.buffer.clear()
+
+    async def _invalidate_price_cache(self, items: list):
+        """
+        invalidate Redis cache for products whose prices have been updated.
+
+        Args:
+            items: List of items that were inserted/updated
+        """
+        try:
+            # Extract unique product IDs from the items
+            product_ids = set()
+            for item in items:
+                product_id = item.get('product_id')
+                if product_id:
+                    product_ids.add(str(product_id))  # Ensure it's a string
+
+            # Invalidate price cache for each product
+            for product_id in product_ids:
+                # Invalidate product prices cache
+                prices_key = make_prices_key(product_id)
+                await redis_cache.delete(prices_key)
+
+                # Invalidate product cache (optional, but good practice)
+                product_key = make_product_key(product_id)
+                await redis_cache.delete(product_key)
+
+                logger.debug(f"Invalidated Redis cache for product {product_id}")
+
+            if product_ids:
+                logger.info(f"Invalidated Redis price cache for {len(product_ids)} products: {list(product_ids)}")
+
+        except Exception as e:
+            logger.warning(f"Error invalidating Redis cache: {e}")
 
     def get_buffer_size(self) -> int:
         """Get current buffer size for monitoring."""

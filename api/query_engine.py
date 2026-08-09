@@ -5,17 +5,148 @@ All search logic resides exclusively in intelligence/nlp/search_pipeline.
 """
 
 import logging
+import hashlib
 from typing import Optional, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from intelligence.nlp.search_pipeline import search_products
+from intelligence.nlp.search_pipeline.normalizer import normalize_query
+from intelligence.nlp.search_pipeline.query_parser import parse_query, ParsedQuery
+from api.redis_cache import (
+    redis_cache,
+    make_product_key,
+    make_prices_key,
+    make_search_results_key,
+    make_query_understanding_key,
+    PRODUCT_TTL,
+    PRICES_TTL,
+    SEARCH_RESULTS_TTL,
+    QUERY_UNDERSTANDING_TTL
+)
 
 logger = logging.getLogger("uvicorn.error")
 
 
+async def cached_normalize_query(query_text: str) -> Any:
+    """
+    Cache the result of query normalization.
+
+    Args:
+        query_text: Raw query text
+
+    Returns:
+        NormalizedText object
+    """
+    # Create cache key for normalized query
+    cache_key = f"query:normalize:{hashlib.sha256(query_text.encode('utf-8')).hexdigest()}"
+
+    # Check cache first
+    cached_result = await redis_cache.get(cache_key)
+    if cached_result is not None:
+        logger.debug(f"Cache hit for query normalization: '{query_text[:50]}...'")
+        # Need to reconstruct NormalizedText object from cached dict
+        # For simplicity, we'll return the cached dict and let caller handle it
+        return cached_result
+
+    # Cache miss - call the actual normalization function
+    logger.debug(f"Cache miss for query normalization: '{query_text[:50]}...'")
+    result = normalize_query(query_text)
+
+    # Cache the result (convert to dict for JSON serialization)
+    result_dict = {
+        'original': result.original,
+        'normalized': result.normalized,
+        'tokens': result.tokens,
+        'metadata': result.metadata
+    }
+    await redis_cache.set(cache_key, result_dict, QUERY_UNDERSTANDING_TTL)
+    logger.debug(f"Cached query normalization for: '{query_text[:50]}...'")
+
+    return result
+
+
+async def cached_parse_query(normalized_text: str) -> ParsedQuery:
+    """
+    Cache the result of query parsing.
+
+    Args:
+        normalized_text: Normalized query text
+
+    Returns:
+        ParsedQuery object
+    """
+    # Create cache key for parsed query
+    cache_key = f"query:parse:{hashlib.sha256(normalized_text.encode('utf-8')).hexdigest()}"
+
+    # Check cache first
+    cached_result = await redis_cache.get(cache_key)
+    if cached_result is not None:
+        logger.debug(f"Cache hit for query parsing: '{normalized_text[:50]}...'")
+        # Reconstruct ParsedQuery object from cached dict
+        return ParsedQuery(**cached_result)
+
+    # Cache miss - call the actual parsing function
+    logger.debug(f"Cache miss for query parsing: '{normalized_text[:50]}...'")
+    result = parse_query(normalized_text)
+
+    # Cache the result (convert to dict for JSON serialization)
+    result_dict = result.to_dict()
+    await redis_cache.set(cache_key, result_dict, QUERY_UNDERSTANDING_TTL)
+    logger.debug(f"Cached query parsing for: '{normalized_text[:50]}...'")
+
+    return result
+
+
+async def cached_search_products(
+    db: AsyncIOMotorDatabase,
+    query_text: str,
+    limit: int = 20,
+    vector_limit: int = 50
+) -> list[Dict[str, Any]]:
+    """
+    Wrapper around search_products with Redis caching.
+
+    Args:
+        db: MongoDB database connection
+        query_text: Query text to search for
+        limit: Maximum number of results to return
+        vector_limit: Number of results to retrieve from vector search
+
+    Returns:
+        List of search results
+    """
+    # Normalize the query for consistent cache keys
+    normalized_result = normalize_query(query_text)
+    normalized_query = normalized_result.normalized
+
+    # Create a cache key based on normalized query and parameters
+    cache_key = make_search_results_key(
+        normalized_query=normalized_query,
+        parsed_query_dict={},  # We don't have access to parsed query here easily
+        limit=limit,
+        vector_limit=vector_limit
+    )
+
+    # Check cache first
+    cached_results = await redis_cache.get(cache_key)
+    if cached_results is not None:
+        logger.debug(f"Cache hit for search query: '{normalized_query[:50]}...'")
+        return cached_results
+
+    # Cache miss - call the actual search function
+    logger.debug(f"Cache miss for search query: '{normalized_query[:50]}...'")
+    results = await search_products(db, query_text, limit, vector_limit)
+
+    # Cache the results (including empty list to cache misses)
+    await redis_cache.set(cache_key, results, SEARCH_RESULTS_TTL)
+    logger.debug(f"Cached search results for query: '{normalized_query[:50]}...'")
+
+    return results
+
+
 async def get_product_by_id(db: AsyncIOMotorDatabase, product_id: str) -> Optional[Dict[str, Any]]:
     """
-    Helper function to fetch a product document by ID.
+    Helper function to fetch a product document by ID with Redis caching.
 
     Args:
         db: MongoDB database connection
@@ -24,9 +155,28 @@ async def get_product_by_id(db: AsyncIOMotorDatabase, product_id: str) -> Option
     Returns:
         Product document or None
     """
+    # Check cache first
+    cache_key = make_product_key(product_id)
+    cached_product = await redis_cache.get(cache_key)
+    if cached_product is not None:
+        logger.debug(f"Cache hit for product {product_id}")
+        return cached_product
+
+    # Cache miss - fetch from database
     try:
         object_id = ObjectId(product_id)
-        return await db.products.find_one({"_id": object_id})
+        product = await db.products.find_one({"_id": object_id})
+
+        # Cache the result (even if None to cache misses)
+        if product is not None:
+            await redis_cache.set(cache_key, product, PRODUCT_TTL)
+            logger.debug(f"Cached product {product_id}")
+        else:
+            # Cache None values for a shorter time to prevent cache pounding on misses
+            await redis_cache.set(cache_key, None, 60)  # 1 minute for negative caching
+            logger.debug(f"Cached negative result for product {product_id}")
+
+        return product
     except Exception as e:
         logger.warning(f"Error fetching product {product_id}: {e}")
         return None
@@ -56,11 +206,16 @@ async def find_product(db: AsyncIOMotorDatabase, query_text: str) -> Optional[Di
         return None
 
     try:
-        # Import here to avoid circular imports and allow graceful degradation
-        from intelligence.nlp.search_pipeline import search_products
+        # Use cached normalization and parsing
+        normalized_result = await cached_normalize_query(query_text)
+        normalized_query = normalized_result.normalized
 
+        # Parse the normalized query (cached)
+        parsed_query = await cached_parse_query(normalized_query)
+
+        # Use cached version of search products with the normalized query
         # Get top result from search pipeline (limit=1)
-        results = await search_products(db, query_text, limit=1, vector_limit=50)
+        results = await cached_search_products(db, normalized_query, limit=1, vector_limit=50)
 
         if not results:
             return None
@@ -104,9 +259,22 @@ async def get_product_prices(
     """
     product_id = str(product["_id"])
 
+    # Create cache key that includes town parameter
+    cache_key_suffix = f"{product_id}:{town or 'all'}"
+    cache_key = make_prices_key(cache_key_suffix)
+
+    # Check cache first
+    cached_prices = await redis_cache.get(cache_key)
+    if cached_prices is not None:
+        logger.debug(f"Cache hit for prices {cache_key_suffix}")
+        return cached_prices
+
+    # Cache miss - fetch from database
     prices = await db.prices.find({"product_id": product_id}).to_list(length=None)
     if not prices:
         logger.info(f"No prices found for product_id={product_id}")
+        # Cache negative result briefly
+        await redis_cache.set(cache_key, None, 60)  # 1 minute for negative caching
         return None
 
     store_ids = list({p["store_id"] for p in prices})
@@ -124,6 +292,8 @@ async def get_product_prices(
         prices = [p for p in prices if p["store_id"] in matching_store_ids]
         if not prices:
             logger.info(f"No prices found for product_id={product_id} in town={town}")
+            # Cache negative result briefly
+            await redis_cache.set(cache_key, None, 60)  # 1 minute for negative caching
             return None
 
     # Rank cheapest first
@@ -141,15 +311,23 @@ async def get_product_prices(
         })
 
     if not store_entries:
+        # Cache negative result briefly
+        await redis_cache.set(cache_key, None, 60)  # 1 minute for negative caching
         return None
 
     latest_verified = max(p["verified_at"] for p in prices)
 
-    return {
+    result = {
         "product_name": product.get("name", "Unknown Product"),
         "stores": store_entries,
         "date": latest_verified.strftime("%Y-%m-%d"),
     }
+
+    # Cache the result
+    await redis_cache.set(cache_key, result, PRICES_TTL)
+    logger.debug(f"Cached prices for {cache_key_suffix}")
+
+    return result
 
 
 async def query_single_product(
@@ -236,8 +414,8 @@ async def find_product_matches(
         return []
 
     try:
-        # Ask the pipeline for the best products
-        search_results = await search_products(
+        # Ask the pipeline for the best products (using cached version)
+        search_results = await cached_search_products(
             db,
             query_text,
             limit=limit,

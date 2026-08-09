@@ -15,6 +15,9 @@ from telegram_bot import set_telegram_webhook
 # ✓ NEW: Import admin routes
 from admin import admin_router
 
+# ��� � � ✓ NEW: Import Redis cache
+from redis_cache import init_redis_cache, close_redis_cache
+
 # Logging
 logger = logging.getLogger("uvicorn.error")
 logger.setLevel(logging.INFO)
@@ -33,19 +36,26 @@ app.include_router(admin_router)
 
 
 @app.on_event("startup")
-async def register_telegram_webhook():
+async def startup_event():
     """
-    Auto-register the webhook on boot, so you never have to manually call
-    set_telegram_webhook() again after restarting ngrok - just update
-    TELEGRAM_WEBHOOK_URL in .env and restart the app.
+    Auto-register the webhook on boot and initialize Redis cache.
     """
+    # Initialize Redis cache
+    await init_redis_cache()
+
+    # Auto-register the webhook on boot
     webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL", "")
     if not webhook_url:
         logger.warning("TELEGRAM_WEBHOOK_URL not set - skipping webhook registration")
-        return
-    success = set_telegram_webhook(webhook_url)
-    if not success:
-        logger.error("Telegram webhook registration failed on startup")
+    else:
+        success = set_telegram_webhook(webhook_url)
+        if not success:
+            logger.error("Telegram webhook registration failed on startup")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up services on shutdown."""
+    await close_redis_cache()
 
 
 @app.get("/")
