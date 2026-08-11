@@ -94,6 +94,10 @@ services:
       # Qdrant Vector Database
       QDRANT_HOST: ${QDRANT_HOST}
       QDRANT_PORT: ${QDRANT_PORT}
+      #Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_URL: ${REDIS_URL}
 
     ports:
       - "8000:8000"
@@ -108,6 +112,8 @@ services:
     depends_on:
       mongo-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -177,6 +183,17 @@ services:
       - qdrant_storage:/qdrant/storage
     networks:
       - pricepoa_network
+    
+  redis:
+    image: redis:7-alpine
+    container_name: pricepoa_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pricepoa_network
+    
 
 networks:
   pricepoa_network:
@@ -184,6 +201,8 @@ networks:
     driver_opts:
       com.docker.network.driver.mtu: 1472
 volumes:
+  redis_data:
+    driver: local
   mongo_data:
     driver: local
   mongo_config:
@@ -192,3 +211,4 @@ volumes:
     driver: local
   hf_cache:              
     driver: local
+  
