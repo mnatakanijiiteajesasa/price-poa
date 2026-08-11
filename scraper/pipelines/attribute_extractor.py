@@ -15,26 +15,27 @@ class ExtractionRules:
     known_brands: List[str] = field(default_factory=lambda: [
         "broadways", "bidco", "brookside", "naivas", "carrefour", "quickmart",
         "daisy", "kelloggs", "nestle", "pampers", "huggies", "unilever", "cadbury",
-        "kapa", "soko", "jogoo", "pembe", "exe", "chapa mandashi", "ketepa", "kericho gold",
-        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi", "daima", "always", 
-        "dove", "fair & lovely", "lifebuoy", "sunlight", "tide", "omo", "surf", "airwick", "persil",
-        "colgate", "pepsodent", "sensodyne", "closeup", "aquafresh", "listerine", "garnier", "nivea",
-        "vaseline", "johnson & johnson", "pampers", "huggies", "mamy poko", "himalaya", "herbal essences",
-        "tropical", "nivea", "loreal", "maybelline", "revlon", "mac", "clinique", "estee lauder", "shiseido",
-        "candybury", "hershey's", "mars", "snickers", "twix", "kitkat", "bounty", "milky way", "m&m's", "cadbury dairy milk",
+        "kapa", "soko", "jogoo", "pembe", "exe", "chapa mandashi", "ketepa", "kericho gold", "umoja"
+        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi", "daima", "always", "dola",
+        "dove", "fair & lovely", "lifebuoy", "sunlight", "tide", "omo", "surf", "airwick", "persil", "ballantines",
+        "colgate", "pepsodent", "sensodyne", "closeup", "aquafresh", "listerine", "garnier", "nivea", "pishori", "teepee", "trufoods", "cafenaivas"
+        "vaseline", "johnson & johnson", "pampers", "huggies", "mamy poko", "himalaya", "herbal essences", "minute maid", "club", "fanta", "sprite", "pepsi", "coca-cola", "7up", "mirinda", "tropicana",
+        "tropical", "nivea", "loreal", "maybelline", "revlon", "mac", "clinique", "estee lauder", "shiseido", "premier", "dove", "lux", "sunlight", "lifebuoy", "tide", "omo", "surf", "airwick", "persil",
+        "candybury", "hershey's", "mars", "snickers", "twix", "kitkat", "bounty", "milky way", "m&m's", "cadbury dairy milk", ""
         "oreo", "lays", "pringles", "doritos", "cheetos", "fritos", "tostitos", "cheetos", "cheetos puffs", "cheetos crunchy", "cheetos flamin' hot", "cheetos cheesy",
-        "cheetos jalapeno", "cheetos spicy", "cheetos sweet", "cheetos sour cream", "cheetos barbecue", "cheetos ranch", "cheetos buffalo", "cheetos honey mustard", 
+        "cheetos jalapeno", "cheetos spicy", "cheetos sweet", "cheetos sour cream", "cheetos barbecue", "cheetos ranch", "cheetos buffalo", "cheetos honey mustard", "bic", "von", "pepsodent", "colgate", "sensodyne", "closeup", "aquafresh", "listerine", "garnier", "nivea", "pishori", "teepee", "trufoods", "cafenaivas",
         "cheetos garlic parmesan", "cheetos chili lime", "cheetos nacho cheese", "cheetos cheddar", "cheetos mozzarella", "cheetos pepper jack", "cheetos smoked gouda", "cheetos truffle", "cheetos white cheddar",
-        "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold", "Delamere", "Arla", "Kenchic", "Tusker", "Chrome",
-        "General Meakins", "Kenya Cane", "Eabl", "dairyland", "Kasuku", "Trust", "KCC", "Kiss", "Rough rider"
+        "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold", "Delamere", "Arla", "Kenchic", "Tusker", "Chrome", "ramtons",
+        "General Meakins", "Kenya Cane", "Eabl", "dairyland", "Kasuku", "Trust", "KCC", "Kiss", "Rough rider", "amtec", "samsung", "sony", "lg", "panasonic", "toshiba", "sharp", "philips", "beko", "haier", "whirlpool", "bosch", "electrolux", "miele", "smeg", "kenwood", "delonghi", "breville",
     ])
 
     # Common categories
     known_categories: List[str] = field(default_factory=lambda: [
-        "milk", "bread", "sugar", "maize flour", "rice", "maize", "unga", "salt", "spirits", "wine", "beer", "cognac", "brandy"
-        "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
-        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt"
-        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereals", "biscuits", "snacks", "chocolate",
+        "milk", "bread", "sugar", "maize flour", "rice", "maize", "unga", "salt", "spirits", "wine", "beer", "cognac", "brandy", "whisky", "vodka",
+        "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water", "juice", "energy drinks", "woofer", "soundber", "TV", "fridge", "washing machine", "microwave", "oven", 
+        "stove", "blender", "mixer", "toaster", "kettle", "iron", "vacuum cleaner", "dry cleaner", "air conditioner", "heater", "fan", "lamp", "light bulb", "candle", "torch", "battery", "charger", "power bank", "adapter", "cable", "headphones", "earphones", "speaker",
+        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt", "icecream", "handwash", "sausage", "bacon", "ham", "cheese", "butter", "cream", "eggs", "fish", "chicken", "beef", "pork", "lamb", "turkey", "lighter"
+        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereals", "biscuits", "snacks", "chocolate", "whisky"
         "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices", "diaper",
         "books", "stationary", "hardware", "condoms", "toys", "games", "furniture", "appliances", "kitchenware", "utensils", "tools", "accessories", "jewelry", "watches", "perfumes", "sauces", "condiments"
     ])
