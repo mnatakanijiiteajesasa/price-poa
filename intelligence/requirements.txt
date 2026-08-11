@@ -12,4 +12,5 @@ qdrant-client
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
 sentence-transformers
+torch-geometric
 python-dotenv
