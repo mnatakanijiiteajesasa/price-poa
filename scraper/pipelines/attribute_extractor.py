@@ -13,32 +13,110 @@ class ExtractionRules:
     """Configuration for attribute extraction."""
     # Known brands for detection
     known_brands: List[str] = field(default_factory=lambda: [
-        "broadways", "bidco", "brookside", "naivas", "carrefour", "quickmart",
-        "daisy", "kelloggs", "nestle", "pampers", "huggies", "unilever", "cadbury",
-        "kapa", "soko", "jogoo", "pembe", "exe", "chapa mandashi", "ketepa", "kericho gold",
-        "mumias", "sony", "samsung", "lg", "nestle", "coca-cola", "pepsi", "daima", "always", 
-        "dove", "fair & lovely", "lifebuoy", "sunlight", "tide", "omo", "surf", "airwick", "persil",
-        "colgate", "pepsodent", "sensodyne", "closeup", "aquafresh", "listerine", "garnier", "nivea",
-        "vaseline", "johnson & johnson", "pampers", "huggies", "mamy poko", "himalaya", "herbal essences",
-        "tropical", "nivea", "loreal", "maybelline", "revlon", "mac", "clinique", "estee lauder", "shiseido",
-        "candybury", "hershey's", "mars", "snickers", "twix", "kitkat", "bounty", "milky way", "m&m's", "cadbury dairy milk",
-        "oreo", "lays", "pringles", "doritos", "cheetos", "fritos", "tostitos", "cheetos", "cheetos puffs", "cheetos crunchy", "cheetos flamin' hot", "cheetos cheesy",
-        "cheetos jalapeno", "cheetos spicy", "cheetos sweet", "cheetos sour cream", "cheetos barbecue", "cheetos ranch", "cheetos buffalo", "cheetos honey mustard", 
-        "cheetos garlic parmesan", "cheetos chili lime", "cheetos nacho cheese", "cheetos cheddar", "cheetos mozzarella", "cheetos pepper jack", "cheetos smoked gouda", "cheetos truffle", "cheetos white cheddar",
-        "farmers choice", "LG", "Ex", "Mwea rice", "Kapa", "Soko", "Pembe", "Chapa Mandashi", "Ketepa", "Kericho Gold", "Delamere", "Arla", "Kenchic", "Tusker", "Chrome",
-        "General Meakins", "Kenya Cane", "Eabl", "dairyland", "Kasuku", "Trust", "KCC", "Kiss", "Rough rider"
-    ])
+        # Retailers / store brands
+        "broadways", "naivas", "carrefour", "quickmart", "chandarana", "cleanshelf",
+        "eastmatt", "greenspoon", "zucchini",
 
+        # Dairy
+        "brookside", "daima", "kcc", "new kcc", "delamere", "fresha", "githunguri",
+        "mount kenya", "spin knit", "molo milk", "sameer", "ilara", "buzeki",
+
+        # Cereals / flours / grains
+        "kapa", "soko", "jogoo", "pembe", "exe", "mwea rice", "hulkani", "ndovu",
+        "capital", "vuna", "supa", "unga", "kifaru", "amaica",
+
+        # Beverages — hot/soft drinks
+        "ketepa", "kericho gold", "mumias", "coca-cola", "pepsi", "sprite", "fanta",
+        "7up", "mirinda", "krest", "tropical", "afia", "minute maid", "quencher",
+        "delmonte", "picana", "keringet", "dasani", "aquamist", "quencher",
+
+        # Alcohol
+        "tusker", "eabl", "kenya cane", "chrome", "gilbeys", "kenya breweries",
+        "sportsman", "guinness", "smirnoff", "johnnie walker", "black & white",
+        "kibao", "vat 69", "ballantines", "hennessy", "richot",
+
+        # Baby / hygiene / FMCG
+        "pampers", "huggies", "mamy poko", "always", "molped", "dola",
+        "dove", "lifebuoy", "sunlight", "geisha", "imperial leather", "protex",
+        "detol", "savlon", "tide", "omo", "surf", "ariel", "persil", "airwick",
+        "jik", "harpic", "mr muscle", "vim",
+
+        # Oral / personal care
+        "colgate", "pepsodent", "sensodyne", "closeup", "aquafresh", "listerine",
+        "garnier", "nivea", "vaseline", "johnson & johnson", "himalaya",
+        "herbal essences", "loreal", "maybelline", "revlon", "mac", "clinique",
+        "estee lauder", "shiseido", "fair & lovely", "tropikal",
+
+        # Confectionery / snacks
+        "cadbury", "kelloggs", "candybury", "hershey's", "mars", "snickers",
+        "twix", "kitkat", "bounty", "milky way", "m&m's", "oreo", "lays",
+        "pringles", "doritos", "cheetos", "fritos", "tostitos", "hansa",
+        "britania", "manji", "trufoods", "cafenaivas", "supa loaf", "festive",
+
+        # Meat / poultry
+        "farmers choice", "kenchic", "rina", "zuku foods", "tropical heat",
+        "wamama", "kenafric",
+
+        # Household electronics/appliances
+        "sony", "samsung", "lg", "panasonic", "toshiba", "sharp", "philips",
+        "beko", "haier", "whirlpool", "bosch", "electrolux", "miele", "smeg",
+        "kenwood", "delonghi", "breville", "ramtons", "zenta", "von", "amtec",
+        "bruhm", "tcl", "hisense", "nunix",
+
+        # Misc / catch-all
+        "unilever", "nestle", "bic", "general meakins", "dairyland", "kasuku",
+        "trust", "kiss", "rough rider", "duracell", "eveready",
+    ])
     # Common categories
     known_categories: List[str] = field(default_factory=lambda: [
-        "milk", "bread", "sugar", "maize flour", "rice", "maize", "unga", "salt", "spirits", "wine", "beer", "cognac", "brandy"
-        "soap", "detergent", "oil", "fat", "tea", "coffee", "soda", "water",
-        "juice", "beer", "wine", "spirits", "cigarettes", "tobacco", "yoghurt"
-        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "Wheat flour", "pasta", "noodles", "cereals", "biscuits", "snacks", "chocolate",
-        "electronics", "phones", "computers", "clothing", "shoes", "bags", "beddings", "beans", "peas", "fruits", "cosmetics", "vegetables", "meat", "spices", "diaper",
-        "books", "stationary", "hardware", "condoms", "toys", "games", "furniture", "appliances", "kitchenware", "utensils", "tools", "accessories", "jewelry", "watches", "perfumes", "sauces", "condiments"
+        # Staples
+        "milk", "bread", "sugar", "maize flour", "wheat flour", "rice", "maize",
+        "unga", "salt", "pasta", "noodles", "cereals", "beans", "peas", "lentils",
+        "porridge flour",
+
+        # Alcohol / drinks
+        "spirits", "wine", "beer", "cognac", "brandy", "whisky", "vodka", "gin",
+        "tea", "coffee", "soda", "water", "juice", "energy drinks", "yoghurt drink",
+
+        # Cleaning / household
+        "soap", "detergent", "handwash", "antiseptic", "bleach", "dish soap",
+        "air freshener", "insecticide", "toilet cleaner", "fabric softener",
+
+        # Cooking
+        "oil", "fat", "cooking fat", "spices", "sauces", "condiments", "vinegar",
+        "baking powder", "yeast",
+
+        # Dairy / proteins / fresh
+        "yoghurt", "icecream", "cheese", "butter", "cream", "eggs", "fish",
+        "chicken", "beef", "pork", "lamb", "turkey", "sausage", "bacon", "ham",
+        "fruits", "vegetables",
+
+        # Personal care / health
+        "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "diaper",
+        "sanitary pads", "condoms", "tissue paper", "toilet paper", "serviettes",
+        "cotton wool", "shaving", "deodorant", "perfumes",
+
+        # Snacks / confectionery
+        "biscuits", "snacks", "chocolate", "crisps", "cake", "sweets", "candy",
+
+        # Tobacco
+        "cigarettes", "tobacco", "lighter",
+
+        # Electronics / appliances
+        "electronics", "phones", "computers", "TV", "fridge", "washing machine",
+        "microwave", "oven", "stove", "blender", "mixer", "toaster", "kettle",
+        "iron", "vacuum cleaner", "air conditioner", "heater", "fan", "woofer",
+        "soundbar", "speaker", "headphones", "earphones", "battery", "charger",
+        "power bank", "adapter", "cable", "light bulb", "candle", "torch",
+
+        # Home / other
+        "clothing", "shoes", "bags", "beddings", "books", "stationary",
+        "hardware", "toys", "games", "furniture", "appliances", "kitchenware",
+        "utensils", "tools", "accessories", "jewelry", "watches", "football",
+        "volleyball",
     ])
 
+    
     # Unit patterns
     unit_patterns: List[str] = field(default_factory=lambda: [
         r'kg', r'g', r'mg',                    # weight

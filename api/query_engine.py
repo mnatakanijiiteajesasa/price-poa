@@ -12,7 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from intelligence.nlp.search_pipeline import search_products
 from intelligence.nlp.search_pipeline.normalizer import normalize_query
 from intelligence.nlp.search_pipeline.query_parser import parse_query, ParsedQuery
-from api.redis_cache import (
+from redis_cache import (
     redis_cache,
     make_product_key,
     make_prices_key,

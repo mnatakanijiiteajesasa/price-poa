@@ -255,7 +255,7 @@ def make_query_understanding_key(normalized_query: str, parsed_query_dict: dict)
         "parsed_query": parsed_query_dict
     }
     # Use a shared hasher instance for efficiency
-    from api.redis_cache import RedisCache
+    from redis_cache import RedisCache
     hasher = RedisCache()
     hash_suffix = hasher._hash_key(data)
     return hasher._make_key(QUERY_UNDERSTANDING_PREFIX, hash_suffix)
@@ -284,7 +284,7 @@ def make_search_results_key(
         "limit": limit,
         **extra_params
     }
-    from api.redis_cache import RedisCache
+    from redis_cache import RedisCache
     hasher = RedisCache()
     hash_suffix = hasher._hash_key(data)
     return hasher._make_key(SEARCH_RESULTS_PREFIX, hash_suffix)
@@ -299,7 +299,7 @@ def make_product_key(product_id: str) -> str:
     Returns:
         Cache key for product
     """
-    from api.redis_cache import RedisCache
+    from redis_cache import RedisCache
     hasher = RedisCache()
     return hasher._make_key(PRODUCT_PREFIX, product_id)
 
@@ -313,6 +313,6 @@ def make_prices_key(product_id: str) -> str:
     Returns:
         Cache key for prices
     """
-    from api.redis_cache import RedisCache
+    from redis_cache import RedisCache
     hasher = RedisCache()
     return hasher._make_key(PRICES_PREFIX, product_id)
