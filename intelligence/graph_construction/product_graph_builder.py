@@ -50,7 +50,7 @@ class ProductGraphBuilder:
         from dotenv import load_dotenv
         load_dotenv()
 
-        self.mongodb_uri = mongodb_uri or os.getenv("$MONGODB_URI")
+        self.mongodb_uri = mongodb_uri or os.getenv("MONGODB_URI", "mongodb://host.docker.internal:27017")
         self.mongodb_db = mongodb_db or os.getenv("MONGODB_DB", "pricepoa")
         self.qdrant_host = qdrant_host or os.getenv("QDRANT_HOST", "host.docker.internal")
         self.qdrant_port = qdrant_port or int(os.getenv("QDRANT_PORT", "6333"))
