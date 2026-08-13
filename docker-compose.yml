@@ -102,6 +102,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./scraper:/app/scraper
       - ./api:/app
       - ./intelligence:/app/intelligence
       - ./database:/app/database

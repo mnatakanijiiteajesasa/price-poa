@@ -61,9 +61,8 @@ async def dashboard(request: Request):
         })
 
     return templates.TemplateResponse(
-        "admin/dashboard.html",
+        request, "admin/dashboard.html",
         {
-            "request": request,
             "total_queries": total_queries,
             "today_queries": today_queries,
             "today_unique_users": today_unique_users,
@@ -108,9 +107,8 @@ async def trends(request: Request):
         data.append(item["count"])
 
     return templates.TemplateResponse(
-        "admin/trends.html",
+        request,"admin/trends.html",
         {
-            "request": request,
             "daily_labels": labels,
             "daily_data": data
         }
@@ -142,9 +140,8 @@ async def popular(request: Request):
     popular_queries = await db.query_logs.aggregate(pipeline).to_list(length=None)
 
     return templates.TemplateResponse(
-        "admin/popular.html",
+        request, "admin/popular.html",
         {
-            "request": request,
             "popular_queries": popular_queries
         }
     )
@@ -172,7 +169,7 @@ async def traffic(request: Request):
     hourly_labels = [f"{i:02d}:00" for i in range(24)]
     hourly_counts = [0] * 24
     for item in hourly_data:
-        hour = item["_id"]["hour"]
+        hour = item["_id"]
         hourly_counts[hour] = item["count"]
 
     # Daily distribution (last 7 days)
@@ -191,22 +188,20 @@ async def traffic(request: Request):
 
     # Format weekday names (adjusting for JS Date.getDay() which starts with Sunday=0)
     weekday_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    weekday_labels = []
     weekday_counts = [0] * 7
 
     for item in daily_data:
         # MongoDB dayOfWeek: 1=Sunday, JS getDay(): 0=Sunday
         # So we can use directly
-        idx = item["_id"]["_id"] - 1  # Convert to 0-based index
+        idx = item["_id"] - 1  # Convert to 0-based index
         if 0 <= idx < 7:
             weekday_counts[idx] = item["count"]
 
     weekday_labels = weekday_names  # Already in correct order
 
     return templates.TemplateResponse(
-        "admin/traffic.html",
+        request, "admin/traffic.html",
         {
-            "request": request,
             "hourly_labels": hourly_labels,
             "hourly_counts": hourly_counts,
             "weekday_labels": weekday_labels,
@@ -322,23 +317,31 @@ async def categories_review(request: Request, status: str = "suggested", page: i
         page = 1
     if page > total_pages:
         page = total_pages
+    
+    showing_end = min(page * per_page, total_count)
 
-    return templates.TemplateResponse(
-        "admin/categories.html",
+    visible_pages = []
+
+    for p in range(1, total_pages + 1):
+        if p <= 5 or p > total_pages - 5 or (current_page - 3 <= p <= current_page + 3):
+            visible_pages.append(p)
+
+    return templates.TemplateResponse(request, "admin/categories.html",
         {
-            "request": request,
             "products": products,
             "known_categories": known_categories,
             "current_status": status,
             "current_page": page,
             "total_count": total_count,
             "total_pages": total_pages,
-            "per_page": per_page
+            "per_page": per_page,
+            "showing_end": showing_end,
+            "visible_pages": visible_pages
         }
     )
 
 
-@admin_router.post("/categories/{product_id}")
+@admin_router.post("/categories/{product_id}", name="admin.update_category")
 async def update_category(product_id: str, category: str = Form(...), status: str = Form(None), page: int = Form(1)):
     """Update a product's category and mark as confirmed"""
     db = await get_db()
