@@ -21,3 +21,4 @@ httpcache/
 response_body
 response_headers
 meta
+mongo-keyfile
