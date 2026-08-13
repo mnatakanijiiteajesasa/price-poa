@@ -3,11 +3,13 @@ Admin panel routes for PricePoa
 Provides dashboards for viewing trends, popular products, traffic stats, etc.
 """
 import os
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from datetime import datetime, timedelta, timezone
 import logging
+from bson import ObjectId
+from scraper.pipelines.attribute_extractor import ExtractionRules
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -58,7 +60,7 @@ async def dashboard(request: Request):
             "timestamp": q["timestamp"].strftime("%Y-%m-%d %H:%M")
         })
 
-        return templates.TemplateResponse(
+    return templates.TemplateResponse(
         "admin/dashboard.html",
         {
             "request": request,
@@ -249,3 +251,122 @@ async def api_recent():
         })
 
     return formatted
+
+
+@admin_router.get("/categories", response_class=HTMLResponse, name="admin.categories_review")
+async def categories_review(request: Request, status: str = "suggested", page: int = 1):
+    """Category review page for products with category='general'"""
+    db = await get_db()
+
+    # Validate status
+    if status not in ["suggested", "unmatched", "all"]:
+        status = "suggested"
+
+    # Build query
+    if status == "suggested":
+        query = {"category": "general", "category_status": "suggested"}
+        sort = [("suggested_category", 1), ("name", 1)]
+    elif status == "unmatched":
+        query = {"category": "general", "category_status": "unmatched"}
+        sort = [("brand", 1), ("name", 1)]
+    else:  # all
+        query = {"category": "general", "category_status": {"$in": ["suggested", "unmatched"]}}
+        # For 'all', we'll use aggregation to sort by category_status then suggested_category/brand then name
+        sort = None  # We'll handle with aggregation
+
+    per_page = 50
+    skip = (page - 1) * per_page
+
+    # Get known categories for dropdown
+    known_categories = ExtractionRules().known_categories
+
+    if status in ["suggested", "unmatched"]:
+        # Simple find with sort
+        products_cursor = db.products.find(query).sort(sort).skip(skip).limit(per_page)
+        products = await products_cursor.to_list(length=None)
+        total_count = await db.products.count_documents(query)
+    else:
+        # Aggregation for 'all' status
+        pipeline = [
+            {"$match": query},
+            {"$addFields": {
+                "sort_category": {
+                    "$cond": [
+                        {"$eq": ["$category_status", "suggested"]},
+                        "$suggested_category",
+                        "$brand"
+                    ]
+                }
+            }},
+            {"$sort": {
+                "category_status": 1,  # suggested first, then unmatched
+                "sort_category": 1,
+                "name": 1
+            }},
+            {"$skip": skip},
+            {"$limit": per_page}
+        ]
+        products = await db.products.aggregate(pipeline).to_list(length=None)
+
+        # Get total count for pagination
+        count_pipeline = [
+            {"$match": query},
+            {"$count": "total"}
+        ]
+        count_result = await db.products.aggregate(count_pipeline).to_list(length=None)
+        total_count = count_result[0]["total"] if count_result else 0
+
+    # Ensure page is at least 1 and not beyond total pages
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+
+    return templates.TemplateResponse(
+        "admin/categories.html",
+        {
+            "request": request,
+            "products": products,
+            "known_categories": known_categories,
+            "current_status": status,
+            "current_page": page,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "per_page": per_page
+        }
+    )
+
+
+@admin_router.post("/categories/{product_id}")
+async def update_category(product_id: str, category: str = Form(...), status: str = Form(None), page: int = Form(1)):
+    """Update a product's category and mark as confirmed"""
+    db = await get_db()
+
+    # Validate ObjectId
+    try:
+        obj_id = ObjectId(product_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+    # Update the product
+    result = await db.products.update_one(
+        {"_id": obj_id},
+        {
+            "$set": {
+                "category": category,
+                "category_status": "confirmed"
+            },
+            "$unset": {
+                "suggested_category": "",
+                "suggested_subcategory": ""
+            }
+        }
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Redirect back to the review page with preserved filters
+    redirect_url = f"/admin/categories?status={status or 'suggested'}&page={page}"
+    return RedirectResponse(url=redirect_url, status_code=303)

@@ -1,0 +1,131 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Category Review{% endblock %}
+
+{% block content %}
+<div class="main-content p-4">
+    <h1 class="mb-4">Category Review</h1>
+    <p class="text-muted mb-4">Review and confirm product categories for items needing classification.</p>
+
+    <!-- Queue Switcher -->
+    <div class="mb-4">
+        <h5>Review Queue</h5>
+        <div class="btn-group btn-group-toggle" data-toggle="buttons">
+            <label class="btn btn-outline-primary {% if current_status == 'suggested' %}active{% endif %}">
+                <input type="radio" name="status" value="suggested" {% if current_status == 'suggested' %}checked{% endif %}> Suggested
+            </label>
+            <label class="btn btn-outline-primary {% if current_status == 'unmatched' %}active{% endif %}">
+                <input type="radio" name="status" value="unmatched" {% if current_status == 'unmatched' %}checked{% endif %}> Unmatched
+            </label>
+            <label class="btn btn-outline-primary {% if current_status == 'all' %}active{% endif %}">
+                <input type="radio" name="status" value="all" {% if current_status == 'all' %}checked{% endif %}> All
+            </label>
+        </div>
+    </div>
+
+    <!-- Products Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Product Name</th>
+                    <th>Brand</th>
+                    <th>Current Suggestion</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if products %}
+                    {% for product in products %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ product.name }}</td>
+                        <td>{{ product.brand or 'N/A' }}</td>
+                        <td>
+                            {% if product.suggested_category %}
+                                <span class="badge bg-info">{{ product.suggested_category }}</span>
+                                {% if product.suggested_subcategory %}: {{ product.suggested_subcategory }}{% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary">None</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="POST" action="{{ url_for('admin.update_category', product_id=product._id) }}" style="display: inline;">
+                                <input type="hidden" name="status" value="{{ current_status }}">
+                                <input type="hidden" name="page" value="{{ current_page }}">
+                                <select name="category" class="form-select form-select-sm" style="width: auto; display: inline-block; max-width: 200px;">
+                                    <option value="">-- Select Category --</option>
+                                    {% for category in known_categories %}
+                                    <option value="{{ category }}"
+                                        {% if product.suggested_category == category %}selected{% endif %}>
+                                        {{ category }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-outline-primary ms-2">Save</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No products found for this queue.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_count > 0 %}
+    <div class="d-flex justify-content-between align-items-center mt-4">
+        <div>
+            <p class="mb-0">Showing {{ (current_page-1)*per_page + 1 }} to
+                {{ min(current_page*per_page, total_count) }} of {{ total_count }} products</p>
+        </div>
+        <div>
+            <nav aria-label="Page navigation">
+                <ul class="pagination">
+                    {% if current_page > 1 %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('admin.categories_review', status=current_status, page=current_page-1) }}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" aria-hidden="true">&laquo;</span>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in range(1, total_pages + 1) %}
+                    {% if page_num > 5 and page_num < total_pages - 4 and (page_num < current_page - 3 or page_num > current_page + 3) %}
+                    {% if loop.first and page_num > 5 %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                    {% continue %}
+                    {% endif %}
+                    <li class="page-item {% if page_num == current_page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('admin.categories_review', status=current_status, page=page_num) }}">{{ page_num }}</a>
+                    </li>
+                    {% endfor %}
+
+                    {% if current_page < total_pages %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('admin.categories_review', status=current_status, page=current_page+1) }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link" aria-hidden="true">&raquo;</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
