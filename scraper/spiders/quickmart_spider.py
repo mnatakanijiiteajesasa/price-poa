@@ -16,7 +16,7 @@ class QuickmartSpider(BasePricePoaSpider):
     name = 'quickmart_spider'
     allowed_domains = ['quickmart.co.ke']
     start_urls = [
-        'https://www.quickmart.co.ke/shop',
+        'https://www.quickmart.co.ke/',
     ]
 
     # Domains that require JavaScript rendering

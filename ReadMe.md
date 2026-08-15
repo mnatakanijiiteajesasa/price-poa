@@ -130,7 +130,7 @@ exit
 
 ### Method 3: Quick Terminal Summary (One-Liner)
 
-Run a quick Python diagnostic script inside the container to print database statistics:
+Run a quick Python diagnostic script inside the container to print databas statistics:
 ```bash
 sudo docker compose run --rm scraper python -c "
 import asyncio
@@ -140,7 +140,7 @@ async def check():
     print('--- Database Summary ---')
     print('Stores:', await db.stores.count_documents({}))
     print('Products:', await db.products.count_documents({}))
-    print('Prices:', await db.prices.count_documents({}))
+    print('Prices:', await db.prices.count_documents({}))e
     print('Scrape Targets:', await db.scrape_targets.count_documents({}))
 asyncio.run(check())
 "

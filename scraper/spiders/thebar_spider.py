@@ -45,6 +45,9 @@ class TheBarSpider(BasePricePoaSpider):
         # If no product links found, try to look for product data in JSON-LD or window state
         if not product_links:
             logger.warning(f"No product links found via CSS selectors, trying alternative methods")
+            with open('/tmp/thebar_debug.html', 'w', encoding='utf-8') as f:
+                f.write(response.text)
+            logger.info(f"Dumped {len(response.text)} bytes to /tmp/thebar_debug.html")
             # We'll try to extract product data directly from the page if possible
             # For now, we'll log and return, but in a real scenario we might need to adjust selectors
             pass

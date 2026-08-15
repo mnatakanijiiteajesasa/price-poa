@@ -15,7 +15,7 @@ class ExtractionRules:
     known_brands: List[str] = field(default_factory=lambda: [
         # Retailers / store brands
         "broadways", "naivas", "carrefour", "quickmart", "chandarana", "cleanshelf",
-        "eastmatt", "greenspoon", "zucchini",
+        "eastmatt", "greenspoon", "zucchini", "dettol", "rosapharm", "savlon", "lifebuoy", "sunlight", "omo", "surf", "ariel", "persil", "airwick",
 
         # Dairy
         "brookside", "daima", "kcc", "new kcc", "delamere", "fresha", "githunguri",
@@ -50,53 +50,54 @@ class ExtractionRules:
         # Confectionery / snacks
         "cadbury", "kelloggs", "candybury", "hershey's", "mars", "snickers",
         "twix", "kitkat", "bounty", "milky way", "m&m's", "oreo", "lays",
-        "pringles", "doritos", "cheetos", "fritos", "tostitos", "hansa",
+        "pringles", "doritos", "cheetos", "fritos", "tostitos", "hansa", "red bull"
         "britania", "manji", "trufoods", "cafenaivas", "supa loaf", "festive",
 
         # Meat / poultry
-        "farmers choice", "kenchic", "rina", "zuku foods", "tropical heat",
-        "wamama", "kenafric",
+        "farmer's choice", "kenchic", "rina", "zuku foods", "tropical heat",
+        "wamama", "kenafric", "kenmeat", 
 
         # Household electronics/appliances
         "sony", "samsung", "lg", "panasonic", "toshiba", "sharp", "philips",
         "beko", "haier", "whirlpool", "bosch", "electrolux", "miele", "smeg", "mikasa",
         "kenwood", "delonghi", "breville", "ramtons", "zenta", "von", "amtec",
-        "bruhm", "tcl", "hisense", "nunix", "brands", "joerex", "midea"
+        "bruhm", "tcl", "hisense", "nunix", "brands", "joerex", "midea",  
 
         # Misc / catch-all
-        "unilever", "nestle", "bic", "general meakins", "dairyland", "kasuku",
-        "trust", "kiss", "rough rider", "duracell", "eveready",
+        "unilever", "nestle", "bic", "general meakins", "dairyland", "kasuku", "damsar", "dark & lovely", "afrisense", "farmers choice",
+        "trust", "kiss", "rough rider", "duracell", "eveready", "highlands", "magnee", "softcare", "nipnap", "velvex", "cussons", "caresons"
     ])
     # Common categories
     known_categories: List[str] = field(default_factory=lambda: [
         # Staples
-        "milk", "bread", "sugar", "maize flour", "wheat flour", "rice", "maize",
-        "unga", "salt", "pasta", "noodles", "cereals", "beans", "peas", "lentils",
-        "porridge flour", "baking flour", "cornflakes", "oats", "breakfast cereals", "cooking oil", "vegetable oil",
+        "milk", "bread", "sugar", "maize flour", "wheat flour", "rice", "maize", "bacon", "energy drink", "sandwich", "snack", "doughnuts", "pizza", "burger", "chicken", "beef", "pork", "lamb", "turkey", "sausage", "bacon", "ham", "peanut butter", "beef kebab", "beef sausage",
+        "unga", "salt", "pasta", "noodles", "cereals", "beans", "peas", "lentils", "masala", "spices", "herbs", "sauces", "condiments", "vinegar", "baking powder", "yeast", 
+        "porridge flour", "baking flour", "cornflakes", "oats", "breakfast cereals", "cooking oil", "vegetable oil", "mandazi", "boerwors hot dogs", "chicken samosa", "chapati", 
  
         # Alcohol / drinks
-        "spirits", "wine", "beer", "cognac", "brandy", "whisky", "vodka", "gin", "bila shaka"
+        "spirits", "wine", "beer", "cognac", "brandy", "whisky", "vodka", "gin", "bila shaka", 
         "tea", "coffee", "soda", "water", "juice", "energy drinks", "yoghurt drink", "culemborg cape", "tusker"
 
         # Cleaning / household
-        "soap", "detergent", "hand wash", "antiseptic", "bleach", "dish soap",
-        "air freshener", "insecticide", "toilet cleaner", "fabric softener",
+        "soap", "detergent", "hand wash", "antiseptic", "bleach", "dish soap", "brightener", "foil"
+        "air freshener", "insecticide", "toilet cleaner", "fabric softener", "cooker"
 
         # Cooking
-        "oil", "fat", "cooking fat", "spices", "sauces", "condiments", "vinegar",
+        "oil", "fat", "cooking fat", "spices", "sauces", "condiments", "vinegar", "chicken", "green grams",
         "baking powder", "yeast", "spice", "soy sauce", "ketchup", "mustard", "mayonnaise", "chili sauce", "hot sauce",
-        ""
+        "butter", "margarine", "ghee", "cooking cream", "coconut milk", "stock cubes", "broth", "gravy", "soup",
 
         # Dairy / proteins / fresh
-        "yoghurt", "icecream", "cheese", "butter", "cream", "eggs", "fish", "orange", 
-        "chicken", "beef", "pork", "lamb", "turkey", "sausage", "bacon", "ham",
-        "fruits", "vegetables", "cucumber", "tomato", "onion", "potato", "carrot", "spinach", "kale", "lettuce",
+        "yoghurt", "icecream", "cheese", "butter", "cream", "eggs", "fish", "orange", "cashew nut butter", "beef samosa", "beaf smokies"
+        "chicken", "beef", "pork", "lamb", "turkey", "sausage", "bacon", "ham", "peanut butter", "beef kebab", "beef sausage",
+        "fruits", "vegetables", "cucumber", "tomato", "onion", "potato", "carrot", "spinach", "kale", "lettuce", "beef steak", "beef mince", "beef ribs", 
+        "beef brisket", "beef liver", "beef tongue", "beef heart", "beef tripe", "beef oxtail", "beef shank", "beef chuck", "beef round", "beef sirloin", "beef tenderloin",
 
         # Personal care / health
         "medicine", "drugs", "pharmacy", "cosmetics", "beauty", "diaper", "baby lotion", "baby powder", "baby oil", "baby wipes", "baby shampoo", "baby soap",
         "sanitary pads", "condoms", "tissue paper", "toilet paper", "serviettes", "pads", "tampons", "sanitary napkins", "sanitary towels", "feminine hygiene products",
-        "cotton wool", "shaving", "deodorant", "perfumes", "deodrant", "shampoo", "conditioner", "hair oil", "hair cream", "hair gel",
-        "body spray", "body lotion", "face cream", "face wash", "toothpaste", "toothbrush", "mouthwash",
+        "cotton wool", "shaving", "deodorant", "perfumes", "deodrant", "shampoo", "conditioner", "hair oil", "hair cream", "hair gel", "petroleum jelly", "baby soft & smooth powder"
+        "body spray", "body lotion", "face cream", "face wash", "toothpaste", "toothbrush", "mouthwash", "perfume", "soap", "baby pants", "diapers", "baby wipes", "baby lotion", "baby powder", "baby oil", "baby shampoo", "baby soap", "sanitary pads", "condoms", "tissue paper", "toilet paper", "serviettes", "pads", "tampons", "sanitary napkins", "sanitary towels", "feminine hygiene products",
 
         # Snacks / confectionery
         "biscuits", "snacks", "chocolate", "crisps", "cake", "sweets", "candy", "ice cream", "popsicle", "lollipop", "gummies", "chewing gum", "cocoa", "chocolate spread", "peanut butter", "jam", "honey", "syrup", "marshmallow", "caramel", "toffee", "nougat", "fudge",
@@ -116,7 +117,7 @@ class ExtractionRules:
         "clothing", "shoes", "bags", "beddings", "books", "stationary", "bucket", "pegs", "mop", "broom", "brush", "dustpan", "bin", "trash can", "laundry basket", "hanger", "curtain", "mat", "rug", "towel", "blanket", "pillow", "sheet", "duvet", "mattress protector",
         "hardware", "toys", "games", "furniture", "appliances", "kitchenware", "table tennis", "soccer ball", "basketball", "tennis racket", "golf club", "fishing rod", "camping gear", "hiking gear", "cycling gear", "swimming gear", "skiing gear", "snowboarding gear", "skateboarding gear", "rollerblading gear",
         "utensils", "tools", "accessories", "jewelry", "watches", "football", "cleanser", "shower", "photocopy paper", "printer paper", "notebook", "pen", "pencil", "marker", "highlighter", "eraser", "sharpener", "stapler", "tape", "glue", "scissors", "calculator", "folder", "binder", "envelope", "label", "sticky notes", 
-        "volleyball", "bag", "scouring powder", "towel", "tissue", "sticky notes", "books", "condom", "calculator", "short hand book", "a4", "" 
+        "volleyball", "bag", "scouring powder", "towel", "tissue", "sticky notes", "books", "condom", "calculator", "short hand book", "a4", "w/machine", "m-wave" 
     ])
 
     
