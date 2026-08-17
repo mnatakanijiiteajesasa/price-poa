@@ -62,14 +62,12 @@ class QuickmartSpider(BasePricePoaSpider):
         """Parse category page and extract product links."""
         logger.info(f"Parsing Quickmart category: {response.url}")
 
-        # Real markup uses flat product slugs (e.g. /brookside-dairy-best-milk-500ml-22)
-        # with no /product/ path segment. Container class confirmed via rendered HTML
-        # inspection (.products.product-item). TODO: verify the <a> tag's exact position
-        # inside this container (outer div vs. .products-img vs. .products-title) once
-        # a full card's markup is confirmed — this selector assumes an <a> descendant
-        # exists directly under .products.product-item.
+        # a.products-title is the real product link (an <a> tag). The shop-branch
+        # selector widget on the homepage reuses .products.product-item styling but
+        # renders its title as a plain <h3>, never an <a>, so this selector naturally
+        # excludes that false-positive without needing extra filtering.
         product_links = response.css(
-            '.products.product-item a::attr(href)'
+            'a.products-title::attr(href)'
         ).getall()
 
         for link in set(product_links):
