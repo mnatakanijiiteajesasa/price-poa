@@ -88,6 +88,7 @@ sudo docker compose run -d --rm scraper python scraper/worker.py --mode once
 docker compose run --rm scraper python scraper/worker.py --mode once --spider thebar_spider
 ```
 
+
 ### Scraper diagnostic tool
 ```bash
 docker compose run --rm scraper python inspect_selectors.py https://ke.thebar.com/collections/party
