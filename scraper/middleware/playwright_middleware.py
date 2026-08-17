@@ -8,6 +8,7 @@ from typing import Optional
 import asyncio
 import logging
 from playwright.async_api import async_playwright, Browser, Page
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +88,29 @@ class PlaywrightMiddleware:
 
         try:
             logger.debug(f"Rendering {request.url} with Playwright")
+            
+            # Create isolated context per request so cookies don't leak across requests
+            context = await self.browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent='PricePoa Scraper (+https://pricepoa.co.ke)'
+            )
 
-            # Create new page
-            page = await self.browser.new_page()
+            # Apply any gate-bypass cookies the spider defines. Each gate type gets its
+            # own named attribute (e.g. location_gate_cookies, age_gate_cookies) so a
+            # spider only opts into the bypasses it actually needs.
+            gate_cookie_attrs = ['location_gate_cookies', 'age_gate_cookies']
+            gate_cookies = []
+            for attr in gate_cookie_attrs:
+                gate_cookies.extend(getattr(spider, attr, []))
 
-            # Set viewport and user agent
-            await page.set_viewport_size({"width": 1920, "height": 1080})
-            await page.set_extra_http_headers({
-                'User-Agent': 'PricePoa Scraper (+https://pricepoa.co.ke)'
-            })
+            if gate_cookies:
+                domain = urlparse(request.url).netloc
+                cookies_to_set = [
+                    {**c, "domain": domain, "path": "/"} for c in gate_cookies
+                ]
+                await context.add_cookies(cookies_to_set)
+
+            page = await context.new_page()
 
             # Navigate to page
             await page.goto(request.url, wait_until='networkidle', timeout=30000)

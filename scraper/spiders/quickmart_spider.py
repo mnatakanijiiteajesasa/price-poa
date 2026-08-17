@@ -31,17 +31,27 @@ class QuickmartSpider(BasePricePoaSpider):
         super().__init__(*args, **kwargs)
         self.store_chain = "Quickmart"
         self.default_store_branch = "Online Store"
+        self.location_gate_cookies = [
+            {"name": "_ygShopId", "value": "67"},
+            {"name": "_ygGeoAddress", "value": "Nakuru, Kenya"},
+            {"name": "_ygGeoLat", "value": "-0.3030988"},
+            {"name": "_ygGeoLng", "value": "36.080026"},
+            {"name": "_ygGeoRadius", "value": "15"},
+        ]
 
     def parse(self, response: Response) -> Generator[scrapy.Request, None, None]:
         """Parse Quickmart homepage and extract category links."""
         logger.info(f"Parsing Quickmart homepage: {response.url}")
 
+        # Real markup uses flat slugs (e.g. /flour, /dairy-products), not /shop/...
+        # Confirmed via rendered HTML inspection (category-menu-link.categoryMenuLinkJs)
         category_links = response.css(
-            'a[href*="/shop/"]::attr(href), .category-link::attr(href), .menu-category a::attr(href)'
+            '.category-menu-link.categoryMenuLinkJs::attr(href)'
         ).getall()
 
         for link in set(category_links):
-            if link:
+            # Skip the "all categories" toggle link, which isn't a real category page
+            if link and 'btn-all-categories' not in link:
                 yield response.follow(
                     url=link,
                     callback=self.parse_category,
@@ -52,8 +62,14 @@ class QuickmartSpider(BasePricePoaSpider):
         """Parse category page and extract product links."""
         logger.info(f"Parsing Quickmart category: {response.url}")
 
+        # Real markup uses flat product slugs (e.g. /brookside-dairy-best-milk-500ml-22)
+        # with no /product/ path segment. Container class confirmed via rendered HTML
+        # inspection (.products.product-item). TODO: verify the <a> tag's exact position
+        # inside this container (outer div vs. .products-img vs. .products-title) once
+        # a full card's markup is confirmed — this selector assumes an <a> descendant
+        # exists directly under .products.product-item.
         product_links = response.css(
-            '.product-card a::attr(href), .item-link::attr(href), a[href*="/product/"]::attr(href)'
+            '.products.product-item a::attr(href)'
         ).getall()
 
         for link in set(product_links):

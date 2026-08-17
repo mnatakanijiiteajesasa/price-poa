@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime
+from urllib.parse import urlparse
 from invisible_playwright.async_api import async_playwright
 
 logger = logging.getLogger(__name__)
@@ -93,13 +94,37 @@ class InvisiblePlaywrightMiddleware:
         if not use_playwright:
             return None
 
+        context = None
+        page = None
         try:
             logger.info(f"Rendering {request.url} with InvisiblePlaywright Firefox")
 
-            # Create new page
-            page = await self.browser.new_page()
+            # Create isolated context per request so cookies don't leak across requests
+            context = await self.browser.new_context(
+                viewport={"width": 1920, "height": 1080}
+            )
+
+            # Apply any gate-bypass cookies the spider defines (e.g. Quickmart's
+            # location_gate_cookies). Each gate type gets its own named attribute
+            # so a spider only opts into the bypasses it actually needs, and
+            # spiders that don't define any are completely unaffected.
+            gate_cookie_attrs = ['location_gate_cookies', 'age_gate_cookies']
+            gate_cookies = []
+            for attr in gate_cookie_attrs:
+                gate_cookies.extend(getattr(spider, attr, []))
+
+            if gate_cookies:
+                domain = urlparse(request.url).netloc
+                cookies_to_set = [
+                    {**c, "domain": domain, "path": "/"} for c in gate_cookies
+                ]
+                await context.add_cookies(cookies_to_set)
+
+            page = await context.new_page()
 
             # Set viewport size to simulate a standard desktop screen
+            # (also set at context level above; kept here as a no-op safe default
+            # in case a future page is opened without going through the context init)
             await page.set_viewport_size({"width": 1920, "height": 1080})
 
             # Navigate to the page
@@ -110,7 +135,10 @@ class InvisiblePlaywrightMiddleware:
 
             # Bypass any age-verification gate (e.g. The Bar's year-of-birth gate)
             # that would otherwise leave the page hiding its real content.
-            await self._bypass_age_gate(page)
+            # Only runs for spiders that explicitly opt in, so it never interferes
+            # with sites like Quickmart that have unrelated modals (e.g. location gates).
+            if getattr(spider, 'enable_age_gate_bypass', False):
+                await self._bypass_age_gate(page)
 
             # Scroll page to bottom to trigger dynamic/lazy-loaded products
             await self._scroll_page_to_bottom(page)
@@ -126,8 +154,9 @@ class InvisiblePlaywrightMiddleware:
             # Get fully rendered HTML content
             content = await page.content()
 
-            # Close page
+            # Close page and context
             await page.close()
+            await context.close()
 
             # Return HtmlResponse with rendered content
             return HtmlResponse(
@@ -139,6 +168,17 @@ class InvisiblePlaywrightMiddleware:
 
         except Exception as e:
             logger.error(f"Error rendering {request.url} with InvisiblePlaywright: {e}")
+            # Ensure page/context don't leak even on failure
+            try:
+                if page is not None:
+                    await page.close()
+            except Exception:
+                pass
+            try:
+                if context is not None:
+                    await context.close()
+            except Exception:
+                pass
             return None
 
     # --- Age-verification gate bypass --------------------------------------
