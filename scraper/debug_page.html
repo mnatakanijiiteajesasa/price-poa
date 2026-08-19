@@ -1,0 +1,747 @@
+<!DOCTYPE html><html lang="en" prefix="og: http://ogp.me/ns#" data-version="TV-1.2.1.20250807" data-kit="F!GR" dir="ltr" class="sticky-demo-header zeynep-initialized"><head><style>.pac-container{background-color:#fff;position:absolute!important;z-index:1000;border-radius:2px;border-top:1px solid #d9d9d9;font-family:Arial,sans-serif;-webkit-box-shadow:0 2px 6px rgba(0,0,0,.3);box-shadow:0 2px 6px rgba(0,0,0,.3);-webkit-box-sizing:border-box;box-sizing:border-box;overflow:hidden}.pac-logo:after{content:"";padding:1px 1px 1px 0;height:18px;-webkit-box-sizing:border-box;box-sizing:border-box;text-align:right;display:block;background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png);background-position:100%;background-repeat:no-repeat;-webkit-background-size:120px 14px;background-size:120px 14px}.hdpi.pac-logo:after{background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3_hdpi.png)}.pac-item{cursor:default;padding:0 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;line-height:30px;text-align:left;border-top:1px solid #e6e6e6;font-size:11px;color:#515151}.pac-item:hover{background-color:#fafafa}.pac-item-selected,.pac-item-selected:hover{background-color:#ebf2fe}.pac-matched{font-weight:700}.pac-item-query{font-size:13px;padding-right:3px;color:#000}.pac-icon{width:15px;height:20px;margin-right:7px;margin-top:6px;display:inline-block;vertical-align:top;background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/autocomplete-icons.png);-webkit-background-size:34px 34px;background-size:34px}.hdpi .pac-icon{background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/autocomplete-icons_hdpi.png)}.pac-icon-search{background-position:-1px -1px}.pac-item-selected .pac-icon-search{background-position:-18px -1px}.pac-icon-marker{background-position:-1px -161px}.pac-item-selected .pac-icon-marker{background-position:-18px -161px}.pac-placeholder{color:gray}sentinel{}
+</style><style>.pac-container{background-color:#fff;position:absolute!important;z-index:1000;border-radius:2px;border-top:1px solid #d9d9d9;font-family:Arial,sans-serif;-webkit-box-shadow:0 2px 6px rgba(0,0,0,.3);box-shadow:0 2px 6px rgba(0,0,0,.3);-webkit-box-sizing:border-box;box-sizing:border-box;overflow:hidden}.pac-logo:after{content:"";padding:1px 1px 1px 0;height:18px;-webkit-box-sizing:border-box;box-sizing:border-box;text-align:right;display:block;background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png);background-position:100%;background-repeat:no-repeat;-webkit-background-size:120px 14px;background-size:120px 14px}.hdpi.pac-logo:after{background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3_hdpi.png)}.pac-item{cursor:default;padding:0 4px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;line-height:30px;text-align:left;border-top:1px solid #e6e6e6;font-size:11px;color:#515151}.pac-item:hover{background-color:#fafafa}.pac-item-selected,.pac-item-selected:hover{background-color:#ebf2fe}.pac-matched{font-weight:700}.pac-item-query{font-size:13px;padding-right:3px;color:#000}.pac-icon{width:15px;height:20px;margin-right:7px;margin-top:6px;display:inline-block;vertical-align:top;background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/autocomplete-icons.png);-webkit-background-size:34px 34px;background-size:34px}.hdpi .pac-icon{background-image:url(https://maps.gstatic.com/mapfiles/api-3/images/autocomplete-icons_hdpi.png)}.pac-icon-search{background-position:-1px -1px}.pac-item-selected .pac-icon-search{background-position:-18px -1px}.pac-icon-marker{background-position:-1px -161px}.pac-item-selected .pac-icon-marker{background-position:-18px -161px}.pac-placeholder{color:gray}sentinel{}
+</style>
+            <!-- Growcer -->
+        <!-- F!GR -->
+        <meta charset="utf-8">
+    <meta name="author" content="">
+    <!-- Mobile Specific Metas ===================== -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        
+    <!-- favicon ================================================== -->
+    <meta name="theme-color" content="rgb(238,52,52)">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="/image/apple-touch-icon/1/144-144">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="msapplication-navbutton-color" content="rgb(238,52,52)">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="msapplication-starturl" content="/">
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" crossorigin="">
+    <link rel="dns-prefetch" href="//maps.google.com">
+    <link rel="dns-prefetch" href="//maps.googleapis.com">
+    <link rel="dns-prefetch" href="//maps.gstatic.com">
+    <link rel="shortcut icon" href="/image/favicon/1">
+    <link rel="apple-touch-icon" href="/image/apple-touch-icon/1">
+    <link rel="apple-touch-icon" sizes="57x57" href="/image/apple-touch-icon/1/57-57">
+    <link rel="apple-touch-icon" sizes="60x60" href="/image/apple-touch-icon/1/60-60">
+    <link rel="apple-touch-icon" sizes="72x72" href="/image/apple-touch-icon/1/72-72">
+    <link rel="apple-touch-icon" sizes="76x76" href="/image/apple-touch-icon/1/76-76">
+    <link rel="apple-touch-icon" sizes="114x114" href="/image/apple-touch-icon/1/114-114">
+    <link rel="apple-touch-icon" sizes="120x120" href="/image/apple-touch-icon/1/120-120">
+    <link rel="apple-touch-icon" sizes="144x144" href="/image/apple-touch-icon/1/144-144">
+    <link rel="apple-touch-icon" sizes="152x152" href="/image/apple-touch-icon/1/152-152">
+    <link rel="apple-touch-icon" sizes="180x180" href="/image/apple-touch-icon/1/180-180">
+    <link rel="icon" type="image/png" sizes="192x192" href="/image/favicon/1/192-192">
+    <link rel="icon" type="image/png" sizes="32x32" href="/image/favicon/1/32-32">
+    <link rel="icon" type="image/png" sizes="96x96" href="/image/favicon/1/96-96">
+    <link rel="icon" type="image/png" sizes="16x16" href="/image/favicon/1/16-16">
+
+    <link rel="manifest" href="/home/pwa-manifest">
+        <link rel="canonical" href="https://www.quickmart.co.ke/">
+    <script async="" src="https://scripts.clarity.ms/0.8.69/clarity.js"></script><script async="" src="https://www.clarity.ms/tag/t1dy9hcmga"></script><script defer="" referrerpolicy="origin" src="/cdn-cgi/zaraz/s.js?z=JTdCJTIyZXhlY3V0ZWQlMjIlM0ElNUIlNUQlMkMlMjJ0JTIyJTNBJTIyUXVpY2ttYXJ0JTIwS2VueWElMjAlN0MlMjBPbmxpbmUlMjBHcm9jZXJ5JTIwU2hvcHBpbmclMjAlRTIlODAlOTMlMjBGcmVzaCUyMEZvb2QlMkMlMjBGYXN0JTIwRGVsaXZlcnklMjAlN0MlMjBRdWlja21hcnQlMjIlMkMlMjJ4JTIyJTNBMC44OTc1MzY2ODU4NzcxMTE2JTJDJTIydyUyMiUzQTEzNjYlMkMlMjJoJTIyJTNBNzY4JTJDJTIyaiUyMiUzQTEwODAlMkMlMjJlJTIyJTNBMTkyMCUyQyUyMmwlMjIlM0ElMjJodHRwcyUzQSUyRiUyRnd3dy5xdWlja21hcnQuY28ua2UlMkZob21lJTIyJTJDJTIyciUyMiUzQSUyMiUyMiUyQyUyMmslMjIlM0EyNCUyQyUyMm4lMjIlM0ElMjJVVEYtOCUyMiUyQyUyMm8lMjIlM0EwJTJDJTIycSUyMiUzQSU1QiU3QiUyMm0lMjIlM0ElMjJzZXQlMjIlMkMlMjJhJTIyJTNBJTVCJTIydXNlcl9pZCUyMiUyQzAlMkMlN0IlMjJzY29wZSUyMiUzQSUyMnBhZ2UlMjIlN0QlNUQlN0QlNUQlN0Q="></script><script>
+		var SITE_ROOT_URL = "https://www.quickmart.co.ke/" ;
+		var langLbl = {"confirmRemove":"Do You Want To Remove?","confirmReset":"Do You Want To Reset Settings?","confirmDelete":"Do You Want To Delete?","confirmUpdateStatus":"Do You Want To Update The Status?","confirmDeleteOption":"Do You Want To Delete This Option?","confirmDeleteProductToTag":"Do You Want To Un-link This Tag?","confirmDefault":"Do You Want To Set Default?","setMainProduct":"Set As Main Product","layoutDirection":"ltr","selectPlan":"Please Select Any Plan From The Above Plans","alreadyHaveThisPlan":"You Have Already Bought This Plan. Please Choose Some Other Plan Or Renew It From <a href=\"\/dashboard\/seller\/subscriptions\">Click Here<\/a>","processing":"Processing...","requestProcessing":"Request Processing...","selectLocation":"Select Location To View Wireframe","favoriteToShop":"Mark Favourite","unfavoriteToShop":"Mark Unfavourite","userNotLogged":"User not logged","selectFile":"File Not Uploaded","thanksForSharing":"Thanks for Sharing ","isMandatory":"Is Mandatory","pleaseEnterValidEmailId":"Please Enter Valid Email Id For","charactersSupportedFor":"Only Characters Are Supported For","pleaseEnterIntegerValue":"Please Enter Integer Value For","pleaseEnterNumericValue":"Please Enter Numeric Value For","startWithLetterOnlyAlphanumeric":"Username Must Be Three Characters Long And Alphanumeric","mustBeBetweenCharacters":"Length Must Be Between 6 To 20 Characters","invalidValues":"Length Invalid Value For","shouldNotBeSameAs":"Should Not Be Same As","mustBeSameAs":"Must Be Same As","mustBeGreaterOrEqual":"Must Be Greater Than Or Equal To","mustBeGreaterThan":"Must Be Greater Than","mustBeLessOrEqual":"Must Be Less Than Or Equal To","mustBeLessThan":"Must Be Less Than","lengthOf":"Length Of","valueOf":"Value Of","mustBeBetween":"Must Be Between","and":"And","pleaseSelect":"Please Select","to":"To","options":"Options","isNotAvailable":"Is Not Available","isDuplicate":"Is Duplicate","RemoveProductFromFavourite":"Remove Product From Favourite List","AddProductToFavourite":"Add product to favourite list","siteCurrencyId":"7","controllerName":"Home","confirmDeletePersonalInformation":"Do You Really Want To Remove All Your Personal Information","preferredDimensions":"Preferred Dimensions %s","dateAndTimeRequired":"Date And Time Is Required","selectDeliverySlot":"Select Delivery Slot","choseDeliverySlotOrSelfPickup":"Either Choose Delivery Slot Or Choose Self Pickup","confirmShopOnMap":"Confirm shop on map","confirmAddressOnMap":"Enter delivery location on map","addProductToWishlist":"Add Product To Your Wishlist","removeProductFromWishlist":"Remove Product From Your Wishlist","loading":"Loading","All":"All","locationPermissionDenied":"Browser Does Not Support Geolocaton","withUsernameOrEmail":"Use Email Instead","withPhoneNumber":"Use Phone Number Instead","otpInterval":"30","defaultCountryCode":"KE","defaultLangAdminAddress":"Quickmart, Kenya","pickupOn":"Self Pickup On","deliveryOn":"Delivery On","invalidFile":"Invalid File Type","invalidGoogleResult":"Location Not found","plsEnterLocation":"Please enter a location","deliveryWillBeOnThisLocation":"Delivery Will Be On This Location","locNotSharedOrinvalid":"Location Not Shared Or Invalid Location","shopPinLocationhere":"Your Location Is Here","waitingForResponse":"Waiting For Payment Response..","updatingRecord":"Response Received. Updating Records..","sharedLocuserDeniedGeoLocation":"User denied the request for Geolocation","sharedLocInfoUnavailable":"Location information is unavailable","sharedLocTimedOut":"Request to get user location timed out","sharedLocUnknownErrorOccurred":"Unknown error occurred","sharedLocBrowserNotSupportGeoLoc":"Geolocation is not supported by this browser","emptyShoppingBag":"Your Shopping Bag is Empty ","invalidLocOrNotSelectedFromSuggestedList":"Invalid Loc Or Not Selected From Suggested List","confirmOrderAssignmentToStaff":"Do You Really Want To Assign Order","confirmSaveOrderAdjustment":"You Will Not Be Able To Do Further Amendments Once Submitted. Are You Sure You Want To Proceed?","invalidGRecaptchaKeys":"You Might Have Invalid Google Recaptcha V3 Keys. Please Verify.","confirmEmtpyCart":"Do You Want To Empty Your Cart?","locationErrorMessage":"Please Specify Your Location","controllerNameRequired":"Controller Name Must Be Declared","copyToClipBoardWithShorcut":"Copy To Clipboard: Ctrl+c, Enter","isDemoUrl":"0","searchString":"Search String Must Be Atleast 3 Characters Long.","removePriceFilter":"Remove Price Filter?","faqsSearchStringLengthMsg":"Search string must be atleast 5 characters long.","cacheTimeStamp":"?t=1786973283.jpg","allowedFileSize":"268435456","fileSizeExceeded":"File size should be lesser than {size-limit}","otherBranchProduct":"Do you want to replace existing shop items?","moreQtyThenAvl":"Requested Quantity More Than Available Stock","yourOrderDelHere":"Your order will be delivered here","movePinToExactLoc":"Move pin to your exact location","redirecting":"Redirecting","validPhone":"Please enter valid phone number","phoneAvailable":"Phone number available!","language1":"ltr"};
+		var CONF_AUTO_CLOSE_SYSTEM_MESSAGES = 1;
+		var CONF_TIME_AUTO_CLOSE_SYSTEM_MESSAGES = 5;
+		var extendEditorJs = false;
+		var currencySymbolLeft = "KES";
+		var currencySymbolRight = "";
+        var controllerName = "Home";
+		if( CONF_TIME_AUTO_CLOSE_SYSTEM_MESSAGES <= 0  ){
+			CONF_TIME_AUTO_CLOSE_SYSTEM_MESSAGES = 3;
+		}
+		defRadius = 15</script>
+<!-- Google tag Manager Head Script -->
+<script>
+        window.dataLayer = window.dataLayer || [];
+        dataLayer.push({
+            user_id: 0
+        });
+    </script><meta name="google-site-verification" content="ZrmVHcUi-5g2IB_kFConSCsawnwiEoChsaTh0mHno1o"><title>Quickmart Kenya | Online Grocery Shopping – Fresh Food, Fast Delivery | Quickmart</title>
+<meta name="description" content="Shop 50,000+ products at Quickmart Kenya – groceries, fresh produce, dairy, beverages &amp; household essentials. Same-day delivery in Nairobi, Mombasa, Kisumu &amp; 16 more towns. Earn Q-Points on every order. Start shopping now."><meta name="keywords" content="quickmart kenya, quickmart online shopping, online grocery kenya, grocery delivery kenya, supermarket delivery kenya, buy groceries online kenya, same day grocery delivery kenya, grocery delivery nairobi, grocery delivery mombasa, grocery delivery kisumu, grocery delivery nakuru, grocery delivery eldoret, grocery delivery thika, grocery delivery kiambu, grocery delivery ruiru, grocery delivery ruaka, grocery delivery kikuyu, grocery delivery kitengela, grocery delivery ongata rongai, grocery delivery mlolongo, grocery delivery machakos, grocery delivery kisii, grocery delivery kitale, grocery delivery nanyuki, grocery delivery kitui, grocery delivery kilifi, fresh fruits and vegetables kenya, dairy products kenya, household essentials online kenya, beverages kenya, quickmart delivery, q-points loyalty kenya, online supermarket kenya, fresh food delivery kenya, quickmart stores kenya"><link rel="stylesheet" type="text/css" href="/public/index.php?url=js-css/css-common&amp;min=1&amp;sid=1774719050">
+<link rel="stylesheet" type="text/css" href="/public/index.php?url=js-css/css&amp;f=css%2Findex-ltr.css&amp;min=1&amp;sid=1780643577">
+<script>
+				var siteConstants = {"webroot":"\/","dashboard":"\/dashboard\/","webrootFront":"\/","webroot_traditional":"\/public\/index.php?url=","rewritingEnabled":"1"};
+	    	</script>
+<script src="/public/index.php?url=js-css/js-common&amp;min=0&amp;sid=1785848605"></script>
+<script src="/public/index.php?url=js-css/js&amp;f=home%2Fpage-js%2Findex.js&amp;min=1&amp;sid=1774719050"></script>
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Quickmart Kenya | Online Grocery Shopping – Fresh Food, Fast Delivery Quickmart">
+    <meta property="og:site_name" content="Quickmart">
+    <meta property="og:url" content="https://www.quickmart.co.ke/home">
+    <meta property="og:description" content="Shop 50,000+ products at Quickmart Kenya – groceries, fresh produce, dairy, beverages &amp; household essentials. Same-day delivery in Nairobi, Mombasa, Kisumu &amp; 16 more towns. Earn Q-Points on every order. Start shopping now. ">
+    <meta property="og:image" content="https://www.quickmart.co.ke/image/meta-image/1?t=1742281983.jpg">
+    
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+
+<style>
+    body {
+        font-family: 'Montserrat', sans-serif !important;
+    }
+
+    :root {
+        --brand-color: rgb(238,52,52);
+        --brand-color-alpha: 238,52,52;
+        --brand-color-inverse: rgb(255,255,255);
+        --secondary-color: rgb(235,235,235);
+        --secondary-color-alpha: 235,235,235;
+        --secondary-color-inverse: rgb(0,0,0);
+            }
+</style>
+<script data-cfasync="false" nonce="">try{(function(w,d){!function(mJ,mK,mL,mM){if(mJ.zaraz)console.error("zaraz is loaded twice");else{mJ[mL]=mJ[mL]||{};mJ[mL].executed=[];mJ.zaraz={deferred:[],listeners:[]};mJ.zaraz._v="20";mJ.zaraz._n="217ebb73-6c57-44cc-bab5-0bcf729a87c2";mJ.zaraz.q=[];mJ.zaraz._f=function(mN){return async function(){var mO=Array.prototype.slice.call(arguments);mJ.zaraz.q.push({m:mN,a:mO})}};for(const mP of["track","set","debug"])mJ.zaraz[mP]=mJ.zaraz._f(mP);mJ.zaraz.init=()=>{var mQ=mK.getElementsByTagName(mM)[0],mR=mK.createElement(mM),mS=mK.getElementsByTagName("title")[0];mS&&(mJ[mL].t=mK.getElementsByTagName("title")[0].text);mJ[mL].x=Math.random();mJ[mL].w=mJ.screen.width;mJ[mL].h=mJ.screen.height;mJ[mL].j=mJ.innerHeight;mJ[mL].e=mJ.innerWidth;mJ[mL].l=mJ.location.href;mJ[mL].r=mK.referrer;mJ[mL].k=mJ.screen.colorDepth;mJ[mL].n=mK.characterSet;mJ[mL].o=(new Date).getTimezoneOffset();if(mJ.dataLayer)for(const mT of Object.entries(Object.entries(dataLayer).reduce((mU,mV)=>({...mU[1],...mV[1]}),{})))zaraz.set(mT[0],mT[1],{scope:"page"});mJ[mL].q=[];for(;mJ.zaraz.q.length;){const mW=mJ.zaraz.q.shift();mJ[mL].q.push(mW)}mR.defer=!0;for(const mX of[localStorage,sessionStorage])Object.keys(mX||{}).filter(mZ=>mZ.startsWith("_zaraz_")).forEach(mY=>{try{mJ[mL]["z_"+mY.slice(7)]=JSON.parse(mX.getItem(mY))}catch{mJ[mL]["z_"+mY.slice(7)]=mX.getItem(mY)}});mR.referrerPolicy="origin";mR.src="/cdn-cgi/zaraz/s.js?z="+btoa(encodeURIComponent(JSON.stringify(mJ[mL])));mQ.parentNode.insertBefore(mR,mQ)};["complete","interactive"].includes(mK.readyState)?zaraz.init():mJ.addEventListener("DOMContentLoaded",zaraz.init)}}(w,d,"zarazData","script");window.zaraz._p=async nv=>new Promise(nw=>{if(nv){nv.e&&nv.e.forEach(nx=>{try{const ny=d.querySelector("script[nonce]"),nz=ny?.nonce||ny?.getAttribute("nonce"),nA=d.createElement("script");nz&&(nA.nonce=nz);nA.innerHTML=nx;nA.onload=()=>{d.head.removeChild(nA)};d.head.appendChild(nA)}catch(nB){console.error(`Error executing script: ${nx}\n`,nB)}});Promise.allSettled((nv.f||[]).map(nC=>fetch(nC[0],nC[1])))}nw()});zaraz._p({"e":["(function(w,d){})(window,document)"]});})(window,document)}catch(e){throw fetch("/cdn-cgi/zaraz/t"),e;};</script><script>(function(w,d){})(window,document)</script><script src="https://maps.google.com/maps-api-v3/api/js/65/12f/util.js"></script><script src="https://maps.google.com/maps-api-v3/api/js/65/12f/controls.js"></script><script src="https://maps.google.com/maps-api-v3/api/js/65/12f/places.js"></script><script src="https://maps.google.com/maps-api-v3/api/js/65/12f/places_impl.js"></script><script src="https://maps.google.com/maps-api-v3/api/js/65/12f/common.js"></script><script src="https://maps.google.com/maps-api-v3/api/js/65/12f/main.js"></script><script>(function(w,d){;w.zarazData.executed.push("Pageview");})(window,document)</script><script>(function(w,d){{const d = document.createElement('div');d.innerHTML = ``;document.body.appendChild(d);};{
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "t1dy9hcmga");
+};{x=new XMLHttpRequest,x.withCredentials=!0,x.open("POST","https://stats.g.doubleclick.net/g/collect?t=dc&aip=1&_r=3&v=1&_v=j86&tid=G-YGT3Y1H929&cid=91e24a31-d496-4179-a43e-d64bcb7b8138&_u=KGDAAEADQAAAAC%7E&z=1778773858",!0),x.onreadystatechange=function(){if (4 == x.readyState) {const domain = x.responseText.trim();if (domain.startsWith("1g") && domain.length > 2) {fetch("https://www.google.com/ads/ga-audiences?t=sr&aip=1&_r=4&v=1&_v=j86&tid=G-YGT3Y1H929&cid=91e24a31-d496-4179-a43e-d64bcb7b8138&_u=KGDAAEADQAAAAC%7E&z=1778773858&slf_rd=1".replace("www.google.com", "www.google."+domain.slice(2)));}}},x.send();}})(window,document)</script></head>
+
+<body class="isHomeJs isDesktopViewJs modal-open fixed" style="overflow: hidden; padding-right: 0px;">
+    <!-- Google tag Manager Body Script -->
+<header class="header header--brand" id="header">
+    <div class="top-bar">
+        <div class="container">
+            <div class="top-bar__inner no-print">
+                <div class="logo">
+                    <a class="" href="/">
+                                                <img src="https://cfn.quickmart.co.ke/resized/150_28/2026_06_1781027447-quickmart.png?t=1781027447" alt="Quickmart" title="Quickmart">
+                    </a>
+                </div>
+
+                <div class="geo-location">
+    <div class="geo-location_inner">
+        <div class="dropdown">
+            <button class="button-geo-location geo-location_trigger dropdown-toggle-custom locationButtonJs" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-bs-auto-close="outside">
+                <span class="labels">
+                    Change Delivery Location?                    <i class="dropdown-toggle-custom-arrow"></i>
+                </span>
+                <span class="geo-location-selected  js-location-address">
+                    Enter your delivery address..                </span>
+            </button>
+            <div class="dropdown-menu dropdown-menu-fit dropdown-menu-anim geo-location_dropdown-menu">
+                <form name="frmPopUpGetUserLocation" method="post" id="frmPopupUserLocation" class="form form-location" onsubmit="setupUserLocation(this, topHdrLocFrmObj,&quot;topHdrLocFrmObj&quot;); return(false);"><input data-field-caption="" data-fatreq="{&quot;required&quot;:false}" type="hidden" name="lat" value=""><input data-field-caption="" data-fatreq="{&quot;required&quot;:false}" type="hidden" name="lng" value="">                <div class="geo-location_body">
+                    <h6 class="title">
+                        Enter Your Delivery Location                    </h6>
+                    <div class="geo-location-top">
+                        <label for="location_fld" class="visually-hidden">
+                            Banner Name</label>
+                        <input class="geo-location_input pac-target-input gloc_autocomplete" id="location_fld" size="50" placeholder="Enter Building, Street, or Area" autocomplete="off" data-field-caption="Address" data-fatreq="{&quot;required&quot;:true}" type="search" name="address" value="">                        <div class="or">
+                            <span>
+                                OR                            </span>
+                        </div>
+                        <button class="btn btn-brand btn-block btn-detect" type="button" onclick="gLoc.getGeoLocation();">
+                            <svg class="svg" width="18" height="18">
+                                <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#gps">
+                                </use>
+                            </svg>
+                            <span class="txt">
+                                Detect my  location                            </span>
+                        </button>
+                    </div>
+                    <div class="div">
+                        <label class="radius" for="radius">
+                            Radius:                            <strong>
+                                <span class="range-js">15</span>
+                                Kms                            </strong>
+                        </label>
+                        <input id="radius" min="1" max="15" class="geo-location_range geo-location-range-js" autocomplete="off" data-field-caption="Radius" data-fatreq="{&quot;required&quot;:true,&quot;integer&quot;:true,&quot;range&quot;:{&quot;minval&quot;:&quot;1&quot;,&quot;maxval&quot;:&quot;15&quot;,&quot;numeric&quot;:true}}" type="range" name="radius" value="15"><span class="form-text muted-text"><strong>You Will Get Branches Within The Defined Radius (km)</strong></span>                    </div>
+                </div>
+                </form>
+                <script>
+			topHdrLocFrmObj_formatting={"errordisplay":3,"summaryElementId":""};topHdrLocFrmObj=$("#frmPopupUserLocation").validation(topHdrLocFrmObj_formatting);
+			</script>            </div>
+        </div>
+    </div>
+</div>
+<form name="homeProductSearch" method="post" id="frm_fat_id_homeProductSearch" class="main-search homeProductSearch" onsubmit="searchProduct(this.value); return(false);"><div class="field-wrap" id="auto-search-js">
+    <label for="keyword" class="visually-hidden">Search</label>
+    <input class="input-main" id="header_search_keyword" placeholder="Search For Groceries..." autocomplete="off" data-field-caption="Search For Groceries..." data-fatreq="{&quot;required&quot;:false}" type="text" name="keyword" value="">    <input id="pageSizeJs" data-field-caption="" data-fatreq="{&quot;required&quot;:false}" type="hidden" name="pagesize" value="30">    <button class="btn-search" name="btn_search" type="submit" role="button" aria-label="search">
+        <svg class="svg" width="20" height="20">
+            <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#magnifying">
+            </use>
+        </svg>
+    </button>
+    <div class="search-suggestions suggestions open" id="search-suggestions-js"></div>
+</div>
+</form>
+<script>
+			homeProductSearch_validator_formatting={"errordisplay":3,"summaryElementId":""};homeProductSearch_validator=$("#frm_fat_id_homeProductSearch").validation(homeProductSearch_validator_formatting);
+			</script>                <div class="quick-nav">
+                    <div class="quick-nav-item">
+                        <div class="dropdown">
+            <button class="quick-nav-link button-account" type="button" onclick="openSignInForm();">
+            <svg class="svg" width="20" height="20">
+                <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#login"></use>
+            </svg>
+            <span class="txt">
+                Sign In </span>
+        </button>
+    </div>                    </div>
+                    <div class="quick-nav-item" id="cartSummary">
+    <button class="quick-nav-link button-cart" type="button" data-bs-toggle="offcanvas" data-bs-target="#sideCartJs">
+        <svg class="svg" width="20" height="20">
+            <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#cart"></use>
+        </svg>
+        <span class="button-cart-data">
+            <span class="button-cart-qty cartQuantity" data-count="0">0</span>
+        </span>
+    </button>
+</div>                </div>
+            </div>
+        </div>
+    </div>
+    <div class="main-bar">
+    <div class="container">
+        <div class="main-bar__inner">
+            <div class="navigation-wrapper navigation-wrapper--style">
+                <ul class="navigation">
+                                            <li class="navigation-item ">
+                            <button class="navigation-link hamburger-categories categoriesMenuJs" type="button" data-bs-toggle="offcanvas" data-bs-target="#categories-menu" disabled="">
+                                <svg class="svg" width="16" height="16">
+                                    <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#hamburger-menu">
+                                    </use>
+                                </svg>All Categories                            </button>
+                        </li>
+                                        <li class="navigation-item ">
+    <a class="navigation-link" target="_self" data-org-url="https://corporate.quickmart.co.ke/" href="https://corporate.quickmart.co.ke/">
+        About Us    </a>
+</li>
+
+<script>
+/* for mobile dropdown menu  */
+$('.dropdown__trigger').click(function() {
+    if ($(this).hasClass('is-active')) {
+        $(this).removeClass('is-active');
+        $(this).next('.dropdown__target_nav').find('.dropdown__trigger').removeClass('is-active');
+        $(this).next('.dropdown__target_nav').slideUp();
+        $(this).next('.dropdown__target_nav').find('.dropdown__target_nav').slideUp();
+        return false;
+    }
+    $('.dropdown__trigger').removeClass('is-active');
+    $(this).addClass("is-active");
+    $(this).parents('ul').each(function() {
+        $(this).siblings('span').addClass('is-active');
+    });
+    $(this).closest('ul').find('li .dropdown__target_nav').slideUp();
+    $(this).next('.dropdown__target_nav').slideDown();
+});
+$('.toggle--nav').click(function() {
+    $(this).toggleClass("is-active");
+    var el = $("body");
+    if (el.hasClass('toggled-left'))
+        el.removeClass("toggled-left");
+    else
+        el.addClass('toggled-left');
+    return false;
+});
+$('body,.overlay--nav').click(function() {
+    if ($('body').hasClass('toggled-left')) {
+        $('.toggle--nav').removeClass("is-active");
+        $('body').removeClass('toggled-left');
+    }
+});
+</script>                    
+                </ul>
+                <ul class="navigation navigation--secondary">
+                            </ul>
+            </div>
+        </div>
+    </div>
+</div>    
+</header><div class="body">
+    <section class="jsSliderSection"><div class="container">
+    <div class="js-hero-slider hero-slider" dir="ltr">
+                    <div class="hero-slider-item ">
+                                    <a class="hero-slider-link" target="_self" href="https://www.quickmart.co.ke/products/search?sort-discounted-desc&amp;pagesize-30&amp;collection-162">
+                                        <span class="hero-slider-media">
+                        <picture>
+            <source srcset="/image/slide/231/3/1/MOBILE?t=1786972107" type="image/webp" media="(max-width:576px)">
+            <source srcset="/image/slide/231/2/1/TABLET?t=1786693137" type="image/webp" media="(max-width:1199px)">
+            <source srcset="https://cfn.quickmart.co.ke/resized/2000_500/2026_08_1786693125-SBANNIV43.jpg?t=1786693125" type="image/webp" media="(min-width:1200px)">
+        
+        <source srcset="/image/slide/231/3/1/MOBILE?t=1786972107" type="image/jpeg" media="(max-width:576px)">
+    
+        <source srcset="/image/slide/231/2/1/TABLET?t=1786693137" type="image/jpeg" media="(max-width:1199px)">
+    
+        <source srcset="https://cfn.quickmart.co.ke/resized/2000_500/2026_08_1786693125-SBANNIV43.jpg?t=1786693125" type="image/jpeg" media="(min-width:1200px)">
+        <img src="https://cfn.quickmart.co.ke/resized/2000_500/2026_08_1786693125-SBANNIV43.jpg?t=1786693125" alt="20th ANNIVERSARY" title="20th ANNIVERSARY" fetchpriority="high">
+</picture>                    </span>
+                                        </a>
+                            </div>
+            </div>
+</div></section>
+            <section class="section loadMoreCollections" data-collection="section">
+            <div class="container">
+                <div class="section-body">
+                    <div class="row align-items-center">
+                        
+<section class="section"> 
+	<div class="container"> 
+		<div class="get-app"> 
+			<div class="app-screen"><img src="https://cfn.quickmart.co.ke/editor/Footer-%281%29-%284%29.png" width="281" height="375" alt=""></div> 
+			<div class="app-data"> 
+				<h3>Download the Q SOKO App</h3> 
+				<p>At Quickmart we pride ourselves with delivering an exceptional customer<br>
+					 experience every time while providing our shopper with variety of goods<br>
+					 at an affordable price!</p> 
+				<h4>Or Download from here</h4> 
+				<div class="app-actions"> <a href="https://play.google.com/store/apps/details?id=com.app.qsoko.buyer" class="link-add" aria-label="Google play"><img src="/images/google-play.png" alt=""></a> <a href="https://apps.apple.com/us/app/q-soko/id6692616680?platform=iphone" class="link-add" aria-label="App store"><img src="/images/app-store.png" alt=""></a></div></div></div></div></section>                    </div>
+                </div>
+            </div>
+        </section>
+    
+    </div>
+
+    <script>
+        /* window.onload = function() {
+    gLoc.getGeoLocation();
+} */
+    </script>
+    <footer id="footer" class="footer no-print">
+                <div class="container">
+                <div class="footer-row" id="footer-nav">
+        <div class="footer-layout">
+                <div class="footer-layout-col">
+        <div class="footer-group">
+                            <h4 class="footer-group-head js-footer-group-head dropdown-toggle-custom">
+                    Get to Know Us<i class="dropdown-toggle-custom-arrow"></i>
+                </h4>
+                        <ul class="footer-nav js-footer-nav">
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/custom/faq" href="/custom/faq">
+                            FAQs                        </a>
+                    </li>
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/blog" href="/blog">
+                            Blogs                        </a>
+                    </li>
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/testimonials" href="/testimonials">
+                            Testimonials                        </a>
+                    </li>
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_blank" data-org-url="/cms/view/3" href="/privacy-policy">
+                            Privacy Policy                        </a>
+                    </li>
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/cms/view/10" href="/loyalty-policy">
+                            Loyalty Policy                        </a>
+                    </li>
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/cms/view/4" href="/return-policy">
+                            Return Policy                        </a>
+                    </li>
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/contact-us" href="/contact-us">
+                            Contact Us                        </a>
+                    </li>
+                            </ul>
+        </div>
+    </div>
+
+    <div class="footer-layout-col">
+        <div class="footer-group">
+                            <h4 class="footer-group-head js-footer-group-head dropdown-toggle-custom">
+                    Promote with Us!<i class="dropdown-toggle-custom-arrow"></i>
+                </h4>
+                        <ul class="footer-nav js-footer-nav">
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/guest-advertiser/account" href="/guest-advertiser/account">
+                            Advertise with Us                        </a>
+                    </li>
+                                    <li class="footer-nav-item">
+                        <a class="footer-nav-link" target="_self" data-org-url="/guest-affiliate" href="/guest-affiliate">
+                            Become an Affiliate                        </a>
+                    </li>
+                            </ul>
+        </div>
+    </div>
+            <div class="footer-layout-col">
+    <div class="footer-group">
+        <h4 class="footer-group-head js-footer-group-head dropdown-toggle-custom">
+            Connect with us            <i class="dropdown-toggle-custom-arrow"></i>
+        </h4>
+        <div class="footer-nav js-footer-nav">
+                <ul class="footer-social">
+        
+            <li class="footer-social-item">
+                <a class="footer-social-link" title="Facebook" target="_blank" href="https://web.facebook.com/quickmartkenyaofficial">
+                    <img class="footer-social-icon" src="https://www.quickmart.co.ke/image/social-platform/1?t=1748335467" alt="Facebook">                </a>
+            </li>
+        
+            <li class="footer-social-item">
+                <a class="footer-social-link" title="Instagram" target="_blank" href="https://www.instagram.com/quickmartkenya/">
+                    <img class="footer-social-icon" src="https://www.quickmart.co.ke/image/social-platform/2?t=1748335564" alt="Instagram">                </a>
+            </li>
+        
+            <li class="footer-social-item">
+                <a class="footer-social-link" title="Threads" target="_blank" href="https://www.threads.com/@quickmartkenya?hl=en">
+                    <img class="footer-social-icon" src="https://www.quickmart.co.ke/image/social-platform/3?t=1748335603" alt="Threads">                </a>
+            </li>
+        
+            <li class="footer-social-item">
+                <a class="footer-social-link" title="X" target="_blank" href="https://x.com/QuickmartKenya">
+                    <img class="footer-social-icon" src="https://www.quickmart.co.ke/image/social-platform/4?t=1748335649" alt="X">                </a>
+            </li>
+        
+            <li class="footer-social-item">
+                <a class="footer-social-link" title="LinkedIn" target="_blank" href="https://www.linkedin.com/company/quickmart-kenya-official/">
+                    <img class="footer-social-icon" src="https://www.quickmart.co.ke/image/social-platform/5?t=1748335729" alt="LinkedIn">                </a>
+            </li>
+        
+            <li class="footer-social-item">
+                <a class="footer-social-link" title="Tiktok" target="_blank" href="https://www.tiktok.com/@quickmartkenya">
+                    <img class="footer-social-icon" src="https://www.quickmart.co.ke/image/social-platform/6?t=1748335769" alt="Tiktok">                </a>
+            </li>
+        
+            <li class="footer-social-item">
+                <a class="footer-social-link" title="WhatsApp" target="_blank" href="https://whatsapp.com/channel/0029VaJyMvV1CYoIS589i229">
+                    <img class="footer-social-icon" src="https://www.quickmart.co.ke/image/social-platform/7?t=1766563314" alt="WhatsApp">                </a>
+            </li>
+            </ul>
+
+ <ul class="contact-info">
+              <li class="contact-info-item">
+             <span class="label">Call:</span>
+             <span class="value">
+                 0789646464/0105554411             </span>
+         </li>
+              <li class="contact-info-item">
+             <span class="label"> Email: </span>
+             <span class="value">
+                 <a href="mailto:online@qsoko.quickmart.co.ke">
+                     online@qsoko.quickmart.co.ke                 </a>
+             </span>
+         </li>
+      </ul></div>
+
+    </div>
+</div>                    </div>
+    </div>
+                            <div class="footer-row" id="join">
+                    <div class="join-blocks">
+                        <div>
+                            <h4 class="footer-group-head">Download the App                            </h4>
+                                                        <div class="app-actions">
+                                                                    <a class="link-add" aria-label="Google play" target="_blank" href="https://play.google.com/store/apps/details?id=com.app.qsoko.buyer">
+                                        <img src="/images/google-play.png" alt="">
+                                    </a>
+                                                                                                    <a class="link-add" aria-label="App store" target="_blank" href="https://apps.apple.com/us/app/q-soko/id6692616680?platform=iphone">
+                                        <img src="/images/app-store.png" alt="">
+                                    </a>
+                                                            </div>
+                        </div>
+                    </div>
+                </div>
+            
+                        <div class="footer-row" id="copyright">
+    <div class="footer-signature">
+        <div class="copyright">
+            Copyright © 2026 Quickmart            |                                 <a target="_blank" data-org-url="/cms/view/13" href="/health-and-safety-policy">
+                                    Health &amp; Safety Policy                                </a>
+                                |                                 <a target="_blank" data-org-url="/cms/view/11" href="/environmental-policy">
+                                    Environmental Policy                                </a>
+                                |                                 <a target="_blank" data-org-url="/cms/view/12" href="/fire-safety-policy">
+                                    Fire Safety Policy                                </a>
+                                |                                 <a target="_self" data-org-url="/cms/view/2" href="/terms-conditions">
+                                    Terms &amp; Conditions                                </a>
+                                |                                 <a target="_self" data-org-url="/site-map" href="/site-map">
+                                    Sitemap                                </a>
+                                        </div>
+                    <div class="tech-partner">
+                Technology Partner: <a href="https://www.zobari.com/" target="_blank" rel="nofollow">Zobari</a>            </div>
+            </div>
+</div>        </div>
+    </footer>
+    
+    <div class="mobile-actions no-print">
+        <div class="mobile-actions-item" role="none">
+            <a class="mobile-actions-link" href="/">
+                <svg class="svg" width="24" height="24">
+                    <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#mbl-home">
+                    </use>
+                </svg>
+                <span class="txt">Home</span>
+            </a>
+        </div>
+        <div class="mobile-actions-item" role="none">
+
+            <button type="button" class="mobile-actions-link" data-bs-toggle="offcanvas" data-bs-target="#offcanvasCategories" aria-controls="offcanvasCategories">
+                <svg class="svg" width="24" height="24">
+                    <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#mbl-category">
+                    </use>
+                </svg>
+                <span class="txt">Category</span>
+            </button>
+
+            <!-- <button type="button" class="mobile-actions-link" onclick="openMobileMenu();">
+                <svg class="svg" width="24" height="24">
+                    <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#store">
+                    </use>
+                </svg>
+                <span class="txt"></span>
+            </button> -->
+        </div>
+        <!-- <div class="mobile-actions-item" role="none">
+        <a class="mobile-actions-link" href="">
+            <svg class="svg" width="24" height="24">
+                <use
+                    xlink:href="images/retina/sprite-header.svg#store">
+                </use>
+            </svg>
+            <span class="txt"></span>
+        </a>
+    </div> -->
+        <div class="mobile-actions-item mobile-actions-qpoints" role="none">
+            <a class="mobile-actions-link" href="/dashboard/buyer/reward-points">
+                <span class="qpoints"><img src="../images/qpoints.svg" alt=""></span>
+                <span class="txt mt-0">-- Points</span>
+            </a>
+        </div>
+        <div class="mobile-actions-item" role="none">
+                            <button class="mobile-actions-link" type="button" onclick="openSignInForm();">
+                    <svg class="svg" width="24" height="24">
+                        <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#mbl-account">
+                        </use>
+                    </svg>
+                    <span class="txt">Account</span>
+                </button>
+                    </div>
+        <div class="mobile-actions-item" role="none">
+            <button class="mobile-actions-link" type="button" data-bs-toggle="offcanvas" data-bs-target="#sideCartJs">
+                <svg class="svg" width="24" height="24">
+                    <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#cart">
+                    </use>
+                </svg>
+                <span class="txt">Cart</span>
+                <span class="cartCountJs"></span>
+            </button>
+        </div>
+    </div>
+
+    <div class="modal fade" id="shopPopupJs">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                            </div>
+        </div>
+    </div>
+
+<div class="modal fade" id="noShopPopupJs">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title">No Quickmart branch found near your delivery location. Please select a branch to proceed.                </h5>
+            </div>
+            <div class="modal-body p-3 shop-layout-3">
+                <button class="btn btn-brand" type="button" onclick="allShopList()">Change Branch?</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal fade show" id="locationInfoBox" style="display: block;" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title">Find your nearest Quickmart store</h5>
+                <!-- <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button> -->
+            </div>
+            <div class="modal-body p-3">
+                <form name="frmModalPopUpGetUserLocation" method="post" id="frmModalPopupUserLocation" onsubmit="setupUserLocation(this, topHdrModalLocFrmObj,'topHdrModalLocFrmObj'); return(false);">
+                    <input type="hidden" name="lat">
+                    <input type="hidden" name="lng">
+                    <div class="quick-search list-cart-triple">
+                        <input autocomplete="off" id="location_fld_popup" class="geo-location_input pac-target-input gloc_autocomplete" title="Enter your area or neighbourhood" size="50" placeholder="Enter your area or neighbourhood" type="search" name="address" value="">
+                        <div class="or">
+                            <span>
+                                OR                            </span>
+                        </div>
+                        <button onclick="gLoc.getGeoLocation();" type="button" class="btn btn-brand btn-block btn-detect">
+                            <svg class="svg" width="18" height="18">
+                                <use xlink:href="/images/retina/sprite-header.svg?t=1754514000#gps">
+                                </use>
+                            </svg>
+                            <span class="txt">
+                                Use My Current Location                            </span>
+                        </button>
+                        <input autocomplete="off" type="hidden" name="radius" value="15">
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+    <script>
+        topHdrModalLocFrmObj_formatting = {
+            "errordisplay": 0,
+            "summaryElementId": ""
+        };
+        topHdrModalLocFrmObj = $("#frmModalPopupUserLocation").validation(topHdrModalLocFrmObj_formatting);
+        checkShopSelected()
+        checkLocationPopup()
+
+        function checkShopSelected() {
+            var inputValue = $('#location_fld').val();
+            if (getCookieValueByRegEx('_ygShopId') == 0 && (inputValue.trim() != '')) {
+                setTimeout(function () {
+                    if (window.location.href != fcom.makeUrl('Shops', '', [], SITE_ROOT_URL)) {
+                        var myModal = new bootstrap.Modal(document.getElementById('noShopPopupJs'), {
+                            backdrop: 'static',
+                            keyboard: false
+                        });
+                        myModal.show();
+                    }
+                }, 500)
+            }
+        }
+
+        function checkLocationPopup() {
+            var inputValue = $('#location_fld').val();
+            if (inputValue.trim() === '' || inputValue.trim() == '0-') {
+                if (!$("#locationInfoBox").hasClass('show')) {
+                    $("#location_fld_popup").val($("#location_fld").val());
+                    var myModal = new bootstrap.Modal(document.getElementById('locationInfoBox'), {
+                        backdrop: 'static',
+                        keyboard: false
+                    });
+                    myModal.show();
+                }
+            }
+        }
+    </script><div class="modal-backdrop fade show"></div>
+
+
+
+    <div class="offcanvas offcanvas-start offcanvas-categories" tabindex="-1" id="categories-menu" aria-hidden="true">
+            </div>
+    <script async="">
+        $(document).ready(function () {
+            if (getCookieValueByRegEx('_ygShopId') != '') {
+                fcom.ajax(fcom.makeUrl('Home', 'getSidebarCategoryMenu'), '', function (res) {
+                    $('#categories-menu').html(res.html);
+                    $('.categoriesMenuJs').removeAttr('disabled');
+                }, {
+                    fOutMode: 'json'
+                });
+            }
+        });
+    </script>
+
+
+<div class="offcanvas offcanvas-end offcanvas-side-cart" tabindex="-1" id="sideCartJs" aria-hidden="true"></div>
+<script> window.loggedInUserId = "0";</script>
+
+<script>
+    var sessId = 'fkkqmv30p6q8ge2gam8treflu5';
+    /******** COMMON TOGGLE FUNCTION  ****************/
+    if ($(window).width() < 1200) {
+        var _body = $('body');
+        var _toggle = $('.trigger-js');
+        _toggle.each(function () {
+            var _this = $(this),
+                _target = $(_this.attr('href'));
+
+            _this.on('click', function (e) {
+
+                e.preventDefault();
+                _target.toggleClass('is-visible');
+                _this.toggleClass('is-active');
+                _body.toggleClass('is-toggle');
+            });
+        });
+    }
+    $(".btn--fav-js").click(function () {
+        $(".btn--fav-js").toggleClass("is-active");
+    });
+    /* FOR SHARE DROPDOWNS  */
+    $('.toggle-dropdown__link-js').each(function () {
+        $(this).click(function () {
+            $(this).parent('.toggle-dropdown').toggleClass("is-active");
+        });
+    })
+    $('html').click(function () {
+        if ($('.toggle-dropdown').hasClass('is-active')) {
+            $('.toggle-dropdown').removeClass('is-active');
+        }
+    });
+    $('.toggle-dropdown').click(function (e) {
+        e.stopPropagation();
+    });
+
+    $('.page-nav-js li a').click(function () {
+        $('.page-nav-js li a').removeClass('is-active');
+        $(this).addClass('is-active');
+    });
+    var header_height = jQuery('.header').outerHeight();
+    if ($(window).width() >= 1200) {
+        $(".sticky-col").each(function () {
+            $(this).stick_in_parent({
+                offset_top: (header_height - 27),
+                recalc_every: 1,
+                parent: '.site-section--offset'
+            });
+        });
+    }
+    /* for fixed header */
+    $(window).scroll(function () {
+        body_height = $(".body").position();
+        scroll_position = $(window).scrollTop();
+        if (typeof body_height !== typeof undefined && body_height.top < scroll_position) {
+            $("body").addClass("fixed");
+        } else {
+            $("body").removeClass("fixed");
+        }
+    });
+    /* FOR BACK TO TOP */
+    $(function () {
+        $(window).scroll(function () {
+            if ($(this).scrollTop() > 100) {
+                $('.gototop').addClass("isvisible");
+            } else {
+                $('.gototop').removeClass("isvisible");
+            }
+        });
+
+        /* scroll body to 0px on click */
+        $('.gototop').click(function () {
+            $('body,html').animate({
+                scrollTop: 0
+            }, 800);
+            return false;
+        });
+    });
+    $('.common_overlay').click(function () {
+        $("body").removeClass("is-toggle");
+        $("#user-account").removeClass("is-visible");
+        $(".header__action-link.trigger.trigger-js").removeClass("is-active");
+    });
+</script>
+
+        <script src="/public/index.php?url=js-css/js&amp;f=js%2Fvariables.js"></script>
+    <script>
+        $(document).ready(function () {
+            $(document).on('click', function (event) {
+                if ($(event.target).hasClass('overlay-filter')) {
+                    if ($('html').hasClass('show-filters')) {
+                        $('.btn-filter').removeClass("is-active");
+                        $('html').removeClass('show-filters');
+                    }
+                }
+            });
+
+                            /* reset local storage if cookie set */
+                localStorage.setItem('_site_demo_popup_priodically', 1);
+                    });
+    </script>
+    <script src="https://maps.google.com/maps/api/js?key=AIzaSyB1MZmvzz9sM21EkSsVNHBpchjy-TS1Il4&amp;libraries=places&amp;loading=async&amp;callback=gLoc.initAutocomplete" async="" defer=""></script>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon="{&quot;version&quot;:&quot;2024.11.0&quot;,&quot;token&quot;:&quot;eea7c802998843909499f474490e265a&quot;}" crossorigin="anonymous"></script>
+
+
+<div></div><div class="pac-container pac-logo" style="display: none;"></div><div class="pac-container pac-logo" style="display: none;"></div></body></html>
