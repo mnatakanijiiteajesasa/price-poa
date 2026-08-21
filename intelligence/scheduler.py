@@ -51,7 +51,7 @@ def start_scheduler():
     try:
         # Add job for product embedding indexing - runs every 6 hours.
         scheduler.add_job(
-            func=lambda: asyncio.create_task(run_embedding_indexing()),
+            func=lambda: asyncio.run(run_embedding_indexing()),
             trigger=IntervalTrigger(hours=6),
             id='product_embedding_indexing',
             name='Backfill product embeddings through the outbox',
